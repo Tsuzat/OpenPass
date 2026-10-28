@@ -5,7 +5,7 @@
   "license": "AGPL-3.0-or-later",
   "workspaces": ["services/*", "packages/*", "apps/*"],
   "scripts": {
-    "test": "bun run --filter @openpass/api test && cargo test --manifest-path crates/openpass-core/Cargo.toml",
+    "test": "bun run --filter @openpass/api test && bun run --filter @openpass/extension test && cargo test --manifest-path crates/openpass-core/Cargo.toml && (cd apps/macos/VaultKit && swift run VaultKitChecks)",
     "typecheck": "bunx tsc --noEmit -p services/api && bunx tsc --noEmit -p packages/shared",
     "dev:api": "bun run --filter @openpass/api dev",
     "setup": "bun run --filter @openpass/api setup"

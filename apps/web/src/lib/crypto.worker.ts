@@ -1,0 +1,43 @@
+/**
+ * Crypto Web Worker: Argon2id (64 MiB) and all AEAD operations run off the main thread.
+ * Protocol: { id, op, args } -> { id, ok, result | error }
+ * The master key never enters this worker either — derive returns verifier + KEK only.
+ */
+import init, {
+  deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
+  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, totpAt, generatePassword,
+  generateTotpSecretB32,
+} from "./wasm/openpass_core.js";
+
+let ready: Promise<void> | null = null;
+
+type Msg = { id: number; op: string; args: unknown[]; wasmUrl?: string };
+
+const ops: Record<string, (...args: never[]) => unknown> = {
+  generateKdfParams: () => generateKdfParams(),
+  derive: (password: string, paramsJson: string) => deriveAuthMaterial(password, paramsJson),
+  randomKey: () => randomKeyB64(),
+  wrapKey: (w: string, k: string) => wrapKeyB64(w, k),
+  unwrapKey: (w: string, b: string) => unwrapKeyB64(w, b),
+  encryptItem: (vk: string, id: string, pt: string) => encryptItem(vk, id, pt),
+  decryptItem: (vk: string, id: string, ct: string, wk: string) => decryptItem(vk, id, ct, wk),
+  generateRecoveryKey: () => generateRecoveryKey(),
+  parseRecoveryKey: (t: string) => parseRecoveryKey(t),
+  totpAt: (s: string, at: string, digits: number, sha256: boolean) => totpAt(s, BigInt(at), 30n, digits, sha256),
+  generatePassword: (len: number) => generatePassword(len),
+  generateTotpSecretB32: () => generateTotpSecretB32(),
+};
+
+self.addEventListener("message", async (e: MessageEvent<Msg>) => {
+  const { id, op, args, wasmUrl } = e.data;
+  try {
+    if (!ready) ready = init(wasmUrl ? { module_or_path: wasmUrl } : undefined).then(() => undefined);
+    await ready;
+    const fn = ops[op];
+    if (!fn) throw new Error(`unknown op: ${op}`);
+    const result = (fn as (...a: unknown[]) => unknown)(...args);
+    (self as unknown as { postMessage: (m: unknown) => void }).postMessage({ id, ok: true, result });
+  } catch (err) {
+    (self as unknown as { postMessage: (m: unknown) => void }).postMessage({ id, ok: false, error: String(err instanceof Error ? err.message : err) });
+  }
+});

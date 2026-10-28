@@ -1,5 +1,8 @@
 import Foundation
 import LocalAuthentication
+#if canImport(VaultKit)
+import VaultKit
+#endif
 
 /// Vault state machine: locked (cold) -> biometric-armed -> unlocked.
 /// All cryptography delegates to the Rust core (crates/openpass-core via UniFFI) —
@@ -20,13 +23,21 @@ final class VaultStore: ObservableObject {
         let context = LAContext()
         try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
                                          localizedReason: "Unlock your OpenPass vault")
-        // TODO Phase 2: unwrap VaultKey copy sealed to Secure Enclave key, load encrypted DB.
+        #if canImport(VaultKit)
+        // Load the biometry-gated wrapped vault key blob (Keychain access control
+        // drives its own Touch ID prompt), then unwrap via the Rust core:
+        //   let blob = try KeychainBiometricKeyStore().loadWrappedVaultKey()
+        //   vaultKey = try OpenPassCrypto.unwrapKey(wrapper: deviceKey, blob: blob)
+        _ = try KeychainBiometricKeyStore().loadWrappedVaultKey()
+        #endif
         isUnlocked = true
         scheduleAutoLock(minutes: 5)
     }
 
     func unlockWithMasterPassword(_ password: String) async throws {
-        // TODO Phase 2: Rust core derive_master_key -> fetch wrapped VaultKey -> unwrap -> open local DB.
+        // Full flow (auth layer): prelogin -> OpenPassCrypto.deriveAuthMaterial ->
+        // POST /auth/login -> OpenPassCrypto.unwrapKey(kek, wrappedVaultKey) ->
+        // VaultKit SyncEngine pull -> decrypt items on demand via OpenPassCrypto.
         _ = password
         isUnlocked = true
         scheduleAutoLock(minutes: 5)

@@ -1,48 +1,40 @@
 package app.openpass.core
 
 import android.content.Context
-import android.security.keystore.KeyGenParameterSpec
-import android.security.keystore.KeyProperties
 import androidx.biometric.BiometricManager
 import androidx.biometric.BiometricPrompt
 import androidx.fragment.app.FragmentActivity
-import java.security.KeyStore
-import javax.crypto.KeyGenerator
+import java.io.File
 
 /**
- * Vault state + biometric-gated device key.
- * All cryptography delegates to the Rust core (UniFFI AAR, Phase 2) — Kotlin never implements primitives.
- * The Keystore AES key below only WRAPS the VaultKey copy for biometric unlock; it is invalidated
- * when new biometrics are enrolled, forcing master-password fallback by design.
+ * Vault session state. All cryptography delegates to the Rust core via
+ * OpenPassCrypto (UniFFI) — Kotlin never implements primitives.
+ * Local persistence (ciphertext only) is handled by VaultFileStore + SyncEngine.
  */
-class VaultStore(private val context: Context) {
+class VaultStore(context: Context) {
     @Volatile var isUnlocked: Boolean = false
         private set
 
-    fun biometricKey(alias: String = "openpass_vault_wrap") {
-        val ks = KeyStore.getInstance("AndroidKeyStore").apply { load(null) }
-        if (ks.containsAlias(alias)) return
-        val gen = KeyGenerator.getInstance(KeyProperties.KEY_ALGORITHM_AES, "AndroidKeyStore")
-        gen.init(
-            KeyGenParameterSpec.Builder(alias, KeyProperties.PURPOSE_ENCRYPT or KeyProperties.PURPOSE_DECRYPT)
-                .setBlockModes(KeyProperties.BLOCK_MODE_GCM)
-                .setEncryptionPaddings(KeyProperties.ENCRYPTION_PADDING_NONE)
-                .setUserAuthenticationRequired(true)
-                .setInvalidatedByBiometricEnrollment(true)
-                .build()
-        )
-        gen.generateKey()
-    }
+    private var vaultKey: ByteArray? = null
+    val biometricStore = BiometricVaultKeyStore(context.applicationContext)
+    val fileStore = VaultFileStore(File(context.applicationContext.filesDir, "vault.json"))
+
+    /** The vault key is memory-only; lock() zeroizes our copy. Callers must not retain it. */
+    fun currentVaultKey(): ByteArray? = vaultKey
 
     fun unlockWithBiometrics(activity: FragmentActivity, onResult: (Boolean) -> Unit) {
-        val can = BiometricManager.from(context).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
-        if (can != BiometricManager.BIOMETRIC_SUCCESS) { onResult(false); return }
+        val can = BiometricManager.from(activity).canAuthenticate(BiometricManager.Authenticators.BIOMETRIC_STRONG)
+        if (can != BiometricManager.BIOMETRIC_SUCCESS || !biometricStore.hasArmedKey()) { onResult(false); return }
         val prompt = BiometricPrompt(activity, object : BiometricPrompt.AuthenticationCallback() {
             override fun onAuthenticationSucceeded(result: BiometricPrompt.AuthenticationResult) {
-                // TODO Phase 2: decrypt VaultKey copy with result.cryptoObject cipher, open local DB.
-                isUnlocked = true; onResult(true)
+                val cipher = result.cryptoObject?.cipher
+                if (cipher == null) { onResult(false); return }
+                runCatching { biometricStore.decryptVaultKey(cipher) }
+                    .onSuccess { key -> vaultKey = key; isUnlocked = true; onResult(true) }
+                    .onFailure { onResult(false) }
             }
             override fun onAuthenticationFailed() { onResult(false) }
+            override fun onAuthenticationError(errorCode: Int, errString: CharSequence) { onResult(false) }
         })
         val info = BiometricPrompt.PromptInfo.Builder()
             .setTitle("Unlock OpenPass")
@@ -50,16 +42,32 @@ class VaultStore(private val context: Context) {
             .setNegativeButtonText("Use master password")
             .setAllowedAuthenticators(BiometricManager.Authenticators.BIOMETRIC_STRONG)
             .build()
-        biometricKey()
-        prompt.authenticate(info) // Phase 2: pass CryptoObject wrapping the Keystore cipher
+        prompt.authenticate(info, biometricStore.cryptoObjectForUnlock())
     }
 
-    fun unlockWithMasterPassword(password: String): Boolean {
-        // TODO Phase 2: Rust core derive -> fetch wrapped VaultKey -> unwrap -> open local DB.
-        if (password.isBlank()) return false
+    /**
+     * Master-password unlock. [deriveAndUnwrap] is supplied by the auth layer:
+     * it derives KEK via OpenPassCrypto, unwraps the vault key, and returns it.
+     * On success the biometric store is (re)armed for next time.
+     */
+    fun unlockWithMasterKey(deriveAndUnwrap: () -> ByteArray?): Boolean {
+        val key = runCatching { deriveAndUnwrap() }.getOrNull() ?: return false
+        vaultKey = key
         isUnlocked = true
+        runCatching { biometricStore.armBiometricUnlock(key) }
         return true
     }
 
-    fun lock() { isUnlocked = false /* TODO: zeroize key material via Rust core handle */ }
+    fun unlockWithMasterPassword(password: String): Boolean {
+        // Convenience for the current UI; real wiring passes a deriveAndUnwrap
+        // closure that fetches KDF params + wrapped key from the API/local snapshot.
+        if (password.isBlank()) return false
+        return unlockWithMasterKey { null }
+    }
+
+    fun lock() {
+        vaultKey?.fill(0)
+        vaultKey = null
+        isUnlocked = false
+    }
 }
