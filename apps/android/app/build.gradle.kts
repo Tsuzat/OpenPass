@@ -24,7 +24,10 @@ dependencies {
     implementation("androidx.compose.material3:material3:1.3.1")
     implementation("androidx.activity:activity-compose:1.9.3")
     implementation("androidx.biometric:biometric:1.1.0")
+    // Provider classes (CredentialProviderService etc.) ship inside the credentials artifact;
+    // there is no separate credentials-provider artifact on Google Maven (verified).
     implementation("androidx.credentials:credentials:1.5.0")
-    implementation("androidx.credentials:credentials-provider:1.5.0")
-    // Rust core via UniFFI generates a local AAR in Phase 2: implementation(files("libs/openpass-core.aar"))
+    // UniFFI-generated bindings call the Rust core through JNA.
+    implementation("net.java.dev.jna:jna:5.14.0@aar")
+    // TODO: package libopenpass_core.so per ABI into jniLibs (cargo NDK build, scripts/build-android-core.sh)
 }

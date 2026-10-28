@@ -2,8 +2,8 @@ package app.openpass.ui
 
 import android.os.Bundle
 import android.view.WindowManager
-import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.fragment.app.FragmentActivity
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
@@ -18,7 +18,8 @@ import java.util.concurrent.Executors
 // Configure your self-hosted Worker URL here (in-app settings screen lands later).
 private const val SERVER_URL = "https://your-worker.example.com"
 
-class MainActivity : ComponentActivity() {
+// FragmentActivity (not plain ComponentActivity) because BiometricPrompt requires it.
+class MainActivity : FragmentActivity() {
     private val io = Executors.newSingleThreadExecutor()
 
     override fun onCreate(savedInstanceState: Bundle?) {

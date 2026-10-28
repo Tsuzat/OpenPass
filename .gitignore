@@ -14,3 +14,7 @@ DerivedData/
 .agents/
 skills-lock.json
 .build/
+
+# Generated Android native libs (scripts/build-android-core.sh)
+apps/android/app/src/main/jniLibs/
+apps/android/local.properties
