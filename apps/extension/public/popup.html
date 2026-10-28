@@ -1,12 +1,27 @@
 <!doctype html>
 <html lang="en">
 <head><meta charset="utf-8" /><title>OpenPass</title>
-<style>body{font-family:system-ui;width:300px;padding:16px}input{width:100%;margin:4px 0 10px}</style></head>
+<style>
+  body{font-family:system-ui;width:320px;padding:14px}
+  input{width:100%;margin:4px 0 10px;box-sizing:border-box}
+  button{cursor:pointer}
+  .item{display:flex;justify-content:space-between;align-items:center;border:1px solid #ddd;padding:6px;margin:4px 0}
+  .muted{color:#777;font-size:12px}
+</style></head>
 <body>
   <h3>🔒 OpenPass</h3>
-  <label>Server URL <input id="server" placeholder="https://your-worker.example.com" /></label>
-  <button id="save">Save server</button>
-  <p id="status">Locked. Unlock arrives with the WASM crypto core (Phase 2).</p>
+  <div id="locked">
+    <label>Server URL <input id="server" placeholder="https://your-worker.example.com" /></label>
+    <label>Email <input id="email" type="email" /></label>
+    <label>Master password <input id="password" type="password" /></label>
+    <button id="unlock">Unlock</button>
+    <p id="status" class="muted">Keys stay in popup memory only. Closing this popup locks the extension.</p>
+  </div>
+  <div id="unlocked" hidden>
+    <p id="vault-status"></p>
+    <div id="items"></div>
+    <button id="lock">Lock</button>
+  </div>
   <script src="popup.js"></script>
 </body>
 </html>

@@ -3,8 +3,9 @@
   "name": "OpenPass",
   "version": "0.1.0",
   "description": "Zero-knowledge password manager — autofill from your self-hosted OpenPass vault.",
-  "permissions": ["storage", "activeTab"],
-  "host_permissions": [],
+  "permissions": ["storage", "activeTab", "tabs"],
+  "host_permissions": ["https://*/*", "http://*/*"],
+  "content_security_policy": { "extension_pages": "script-src 'self' 'wasm-unsafe-eval'; object-src 'self'" },
   "background": { "service_worker": "background.js" },
   "action": { "default_popup": "popup.html", "default_title": "OpenPass" },
   "content_scripts": [{ "matches": ["<all_urls>"], "js": ["content.js"], "run_at": "document_idle" }]

@@ -11,6 +11,8 @@ export interface AppOptions {
   now?: () => number;
   blobs?: BlobStore;
   maxAttachmentBytes?: number;
+  /** Shared cross-isolate limiter (Durable Objects in production). Falls back to per-isolate memory. */
+  rateLimiter?: (key: string, limit: number, windowMs: number) => Promise<boolean>;
 }
 
 const ACCESS_TTL = 15 * 60 * 1000;
@@ -31,7 +33,8 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     c.header("Cache-Control", "no-store");
   });
 
-  const rateLimited = (key: string, limit = 20, windowMs = 60_000) => {
+  const rateLimited = async (key: string, limit = 20, windowMs = 60_000): Promise<boolean> => {
+    if (opts.rateLimiter) return opts.rateLimiter(key, limit, windowMs);
     const t = now();
     const e = attempts.get(key);
     if (!e || t > e.resetAt) { attempts.set(key, { count: 1, resetAt: t + windowMs }); return false; }
@@ -81,7 +84,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
 
   app.post("/auth/register", async (c) => {
     if (opts.allowRegistration === false) return err(c, 403, "REGISTRATION_CLOSED");
-    if (rateLimited(`register:${c.req.header("CF-Connecting-IP") ?? "local"}`)) return err(c, 429, "RATE_LIMITED");
+    if (await rateLimited(`register:${c.req.header("CF-Connecting-IP") ?? "local"}`)) return err(c, 429, "RATE_LIMITED");
     const body = RegisterRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION", { issues: body.error.issues });
     const d = body.data;
@@ -107,7 +110,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
 
   app.post("/auth/login", async (c) => {
     const ip = c.req.header("CF-Connecting-IP") ?? "local";
-    if (rateLimited(`login:${ip}`) || rateLimited(`login-ip:${ip}`, 100)) return err(c, 429, "RATE_LIMITED");
+    if ((await rateLimited(`login:${ip}`)) || (await rateLimited(`login-ip:${ip}`, 100))) return err(c, 429, "RATE_LIMITED");
     const body = LoginRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const d = body.data;
@@ -171,7 +174,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
 
   // Recovery step 1: prove recovery-key possession, receive the recovery-wrapped vault key.
   app.post("/auth/recovery-info", async (c) => {
-    if (rateLimited(`recovery:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
+    if (await rateLimited(`recovery:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
     const body = RecoveryInfoRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const user = await store.getUserByEmail(body.data.email.toLowerCase());
@@ -184,7 +187,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   // Recovery step 2: same proof authorizes replacing the auth verifier + wrapped keys.
   // The recovery key itself does not change, so its verifier hash and wrap remain valid.
   app.post("/auth/recover", async (c) => {
-    if (rateLimited(`recover:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
+    if (await rateLimited(`recover:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
     const body = RecoverRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const d = body.data;

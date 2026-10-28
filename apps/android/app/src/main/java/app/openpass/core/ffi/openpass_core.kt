@@ -749,6 +749,12 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -780,6 +786,8 @@ internal interface UniffiLib : Library {
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_encrypt_item(`vaultKey`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_generate_passkey_keypair(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_generate_password(`length`: Int,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_generate_recovery_key(uniffi_out_err: UniffiRustCallStatus, 
@@ -791,6 +799,10 @@ internal interface UniffiLib : Library {
     fun uniffi_openpass_core_fn_func_ffi_new_kdf_params(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_parse_recovery_key(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_passkey_cose_public_key(`publicKeySec1`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_passkey_sign(`privateKeyPkcs8`: RustBuffer.ByValue,`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_random_key(uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -930,6 +942,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_encrypt_item(
     ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_generate_passkey_keypair(
+    ): Short
     fun uniffi_openpass_core_checksum_func_ffi_generate_password(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_generate_recovery_key(
@@ -941,6 +955,10 @@ internal interface UniffiLib : Library {
     fun uniffi_openpass_core_checksum_func_ffi_new_kdf_params(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_parse_recovery_key(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_passkey_cose_public_key(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_passkey_sign(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_random_key(
     ): Short
@@ -993,6 +1011,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_openpass_core_checksum_func_ffi_encrypt_item() != 58512.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_generate_passkey_keypair() != 3507.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_openpass_core_checksum_func_ffi_generate_password() != 1286.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
@@ -1009,6 +1030,12 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_parse_recovery_key() != 27901.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_passkey_cose_public_key() != 33022.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_passkey_sign() != 20635.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_random_key() != 51891.toShort()) {
@@ -1275,6 +1302,38 @@ public object FfiConverterTypeKdfParams: FfiConverterRustBuffer<KdfParams> {
 
 
 
+data class PasskeyKeyPairFfi (
+    var `privateKeyPkcs8`: kotlin.ByteArray, 
+    var `publicKeySec1`: kotlin.ByteArray
+) {
+    
+    companion object
+}
+
+/**
+ * @suppress
+ */
+public object FfiConverterTypePasskeyKeyPairFfi: FfiConverterRustBuffer<PasskeyKeyPairFfi> {
+    override fun read(buf: ByteBuffer): PasskeyKeyPairFfi {
+        return PasskeyKeyPairFfi(
+            FfiConverterByteArray.read(buf),
+            FfiConverterByteArray.read(buf),
+        )
+    }
+
+    override fun allocationSize(value: PasskeyKeyPairFfi) = (
+            FfiConverterByteArray.allocationSize(value.`privateKeyPkcs8`) +
+            FfiConverterByteArray.allocationSize(value.`publicKeySec1`)
+    )
+
+    override fun write(value: PasskeyKeyPairFfi, buf: ByteBuffer) {
+            FfiConverterByteArray.write(value.`privateKeyPkcs8`, buf)
+            FfiConverterByteArray.write(value.`publicKeySec1`, buf)
+    }
+}
+
+
+
 data class RecoveryKey (
     var `text`: kotlin.String, 
     var `key`: kotlin.ByteArray
@@ -1511,6 +1570,15 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     )
     }
     
+ fun `ffiGeneratePasskeyKeypair`(): PasskeyKeyPairFfi {
+            return FfiConverterTypePasskeyKeyPairFfi.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_generate_passkey_keypair(
+        _status)
+}
+    )
+    }
+    
  fun `ffiGeneratePassword`(`length`: kotlin.UInt): kotlin.String {
             return FfiConverterString.lift(
     uniffiRustCall() { _status ->
@@ -1564,6 +1632,26 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_parse_recovery_key(
         FfiConverterString.lower(`text`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiPasskeyCosePublicKey`(`publicKeySec1`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_passkey_cose_public_key(
+        FfiConverterByteArray.lower(`publicKeySec1`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiPasskeySign`(`privateKeyPkcs8`: kotlin.ByteArray, `data`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_passkey_sign(
+        FfiConverterByteArray.lower(`privateKeyPkcs8`),FfiConverterByteArray.lower(`data`),_status)
 }
     )
     }

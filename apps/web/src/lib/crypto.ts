@@ -6,7 +6,7 @@
  */
 import init, {
   deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
-  encryptItem, decryptItem, encryptBytesB64, decryptBytesB64, encryptFileB64, decryptFileB64, deriveStandaloneKey, deriveKeyWithParams, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
+  encryptItem, decryptItem, generatePasskeyKeypair, encryptBytesB64, decryptBytesB64, encryptFileB64, decryptFileB64, deriveStandaloneKey, deriveKeyWithParams, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
   generateTotpSecretB32,
 } from "./wasm/openpass_core.js";
 import wasmUrl from "./wasm/openpass_core_bg.wasm?url";
@@ -79,6 +79,12 @@ export async function decryptItemJson<T>(vaultKeyB64: string, itemId: string, it
     vaultKeyB64, itemId, item.ciphertextB64, item.wrappedItemKeyB64);
   return JSON.parse(s as string) as T;
 }
+export interface PasskeyKeypair { privateKeyPkcs8B64: string; publicKeySec1B64: string; cosePublicKeyB64: string }
+export async function generatePasskey(): Promise<PasskeyKeypair> {
+  const s = await call("generatePasskeyKeypair", () => generatePasskeyKeypair());
+  return JSON.parse(s as string) as PasskeyKeypair;
+}
+
 const bytesToB64 = (bytes: Uint8Array) => {
   let bin = "";
   const CHUNK = 0x8000;

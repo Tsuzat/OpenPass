@@ -648,6 +648,72 @@ public func FfiConverterTypeKdfParams_lower(_ value: KdfParams) -> RustBuffer {
 }
 
 
+public struct PasskeyKeyPairFfi {
+    public var privateKeyPkcs8: Data
+    public var publicKeySec1: Data
+
+    // Default memberwise initializers are never public by default, so we
+    // declare one manually.
+    public init(privateKeyPkcs8: Data, publicKeySec1: Data) {
+        self.privateKeyPkcs8 = privateKeyPkcs8
+        self.publicKeySec1 = publicKeySec1
+    }
+}
+
+
+
+extension PasskeyKeyPairFfi: Equatable, Hashable {
+    public static func ==(lhs: PasskeyKeyPairFfi, rhs: PasskeyKeyPairFfi) -> Bool {
+        if lhs.privateKeyPkcs8 != rhs.privateKeyPkcs8 {
+            return false
+        }
+        if lhs.publicKeySec1 != rhs.publicKeySec1 {
+            return false
+        }
+        return true
+    }
+
+    public func hash(into hasher: inout Hasher) {
+        hasher.combine(privateKeyPkcs8)
+        hasher.combine(publicKeySec1)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public struct FfiConverterTypePasskeyKeyPairFfi: FfiConverterRustBuffer {
+    public static func read(from buf: inout (data: Data, offset: Data.Index)) throws -> PasskeyKeyPairFfi {
+        return
+            try PasskeyKeyPairFfi(
+                privateKeyPkcs8: FfiConverterData.read(from: &buf), 
+                publicKeySec1: FfiConverterData.read(from: &buf)
+        )
+    }
+
+    public static func write(_ value: PasskeyKeyPairFfi, into buf: inout [UInt8]) {
+        FfiConverterData.write(value.privateKeyPkcs8, into: &buf)
+        FfiConverterData.write(value.publicKeySec1, into: &buf)
+    }
+}
+
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyKeyPairFfi_lift(_ buf: RustBuffer) throws -> PasskeyKeyPairFfi {
+    return try FfiConverterTypePasskeyKeyPairFfi.lift(buf)
+}
+
+#if swift(>=5.8)
+@_documentation(visibility: private)
+#endif
+public func FfiConverterTypePasskeyKeyPairFfi_lower(_ value: PasskeyKeyPairFfi) -> RustBuffer {
+    return FfiConverterTypePasskeyKeyPairFfi.lower(value)
+}
+
+
 public struct RecoveryKey {
     public var text: String
     public var key: Data
@@ -913,6 +979,12 @@ public func ffiEncryptItem(vaultKey: Data, itemId: String, plaintext: Data)throw
     )
 })
 }
+public func ffiGeneratePasskeyKeypair() -> PasskeyKeyPairFfi {
+    return try!  FfiConverterTypePasskeyKeyPairFfi.lift(try! rustCall() {
+    uniffi_openpass_core_fn_func_ffi_generate_passkey_keypair($0
+    )
+})
+}
 public func ffiGeneratePassword(length: UInt32) -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_openpass_core_fn_func_ffi_generate_password(
@@ -950,6 +1022,21 @@ public func ffiParseRecoveryKey(text: String)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
     uniffi_openpass_core_fn_func_ffi_parse_recovery_key(
         FfiConverterString.lower(text),$0
+    )
+})
+}
+public func ffiPasskeyCosePublicKey(publicKeySec1: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_passkey_cose_public_key(
+        FfiConverterData.lower(publicKeySec1),$0
+    )
+})
+}
+public func ffiPasskeySign(privateKeyPkcs8: Data, data: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_passkey_sign(
+        FfiConverterData.lower(privateKeyPkcs8),
+        FfiConverterData.lower(data),$0
     )
 })
 }
@@ -1033,6 +1120,9 @@ private var initializationResult: InitializationResult = {
     if (uniffi_openpass_core_checksum_func_ffi_encrypt_item() != 58512) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_openpass_core_checksum_func_ffi_generate_passkey_keypair() != 3507) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_openpass_core_checksum_func_ffi_generate_password() != 1286) {
         return InitializationResult.apiChecksumMismatch
     }
@@ -1049,6 +1139,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_parse_recovery_key() != 27901) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_passkey_cose_public_key() != 33022) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_passkey_sign() != 20635) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_random_key() != 51891) {

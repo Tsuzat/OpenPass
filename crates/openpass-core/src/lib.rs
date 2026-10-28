@@ -310,6 +310,60 @@ pub fn totp_verify(secret: &[u8], code: &str, unix_seconds: u64, period: u64, di
     })
 }
 
+// ---------- Synced passkeys (WebAuthn / ES256) ----------
+// Private keys live inside encrypted passkey vault items. Platform layers
+// (ASCredentialProvider / Android Credential Manager) build authenticatorData
+// and clientDataHash; the core owns key generation, COSE encoding, and signing.
+
+pub struct PasskeyKeyPair {
+    /// PKCS#8 DER private key (store encrypted in the vault item)
+    pub private_key_pkcs8: Vec<u8>,
+    /// SEC1 uncompressed public point: 0x04 || X(32) || Y(32)
+    pub public_key_sec1: Vec<u8>,
+}
+
+pub fn generate_passkey_keypair() -> PasskeyKeyPair {
+    use p256::elliptic_curve::sec1::ToEncodedPoint;
+    use p256::pkcs8::EncodePrivateKey;
+    let signing = p256::ecdsa::SigningKey::random(&mut OsRng);
+    let private_key_pkcs8 = signing.to_pkcs8_der().expect("pkcs8 encoding").as_bytes().to_vec();
+    let public_key_sec1 = signing.verifying_key().to_encoded_point(false).as_bytes().to_vec();
+    PasskeyKeyPair { private_key_pkcs8, public_key_sec1 }
+}
+
+/// Minimal CBOR encoding of a COSE_Key for ES256: {1:2, 3:-7, -1:1, -2:x, -3:y}
+pub fn passkey_cose_public_key(public_key_sec1: &[u8]) -> Result<Vec<u8>, Error> {
+    if public_key_sec1.len() != 65 || public_key_sec1[0] != 0x04 {
+        return Err(Error::InvalidKeyLength);
+    }
+    let (x, y) = (&public_key_sec1[1..33], &public_key_sec1[33..65]);
+    let mut out = vec![0xA5, 0x01, 0x02, 0x03, 0x26, 0x20, 0x01, 0x21, 0x58, 0x20];
+    out.extend_from_slice(x);
+    out.extend_from_slice(&[0x22, 0x58, 0x20]);
+    out.extend_from_slice(y);
+    Ok(out)
+}
+
+/// Sign authenticatorData || clientDataHash with ES256. Returns DER-encoded ECDSA signature.
+pub fn passkey_sign(private_key_pkcs8: &[u8], data: &[u8]) -> Result<Vec<u8>, Error> {
+    use p256::ecdsa::{signature::Signer, Signature};
+    use p256::pkcs8::DecodePrivateKey;
+    let signing = p256::ecdsa::SigningKey::from_pkcs8_der(private_key_pkcs8).map_err(|_| Error::Crypto)?;
+    let signature: Signature = signing.sign(data);
+    Ok(signature.to_der().as_bytes().to_vec())
+}
+
+pub fn passkey_verify(public_key_sec1: &[u8], data: &[u8], signature_der: &[u8]) -> Result<bool, Error> {
+    use p256::ecdsa::{signature::Verifier, Signature};
+    if public_key_sec1.len() != 65 || public_key_sec1[0] != 0x04 {
+        return Err(Error::InvalidKeyLength);
+    }
+    let point = p256::EncodedPoint::from_bytes(public_key_sec1).map_err(|_| Error::Crypto)?;
+    let verifying = p256::ecdsa::VerifyingKey::from_encoded_point(&point).map_err(|_| Error::Crypto)?;
+    let signature = Signature::from_der(signature_der).map_err(|_| Error::Crypto)?;
+    Ok(verifying.verify(data, &signature).is_ok())
+}
+
 // ---------- Password generator ----------
 
 const CHARSET: &[u8] = b"abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789!@#$%^&*()-_=+";

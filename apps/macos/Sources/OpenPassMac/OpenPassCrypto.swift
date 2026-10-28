@@ -27,6 +27,10 @@ enum OpenPassCrypto {
         try ffiDecryptItem(vaultKey: vaultKey, itemId: itemId, item: item)
     }
 
+    static func generatePasskeyKeypair() -> PasskeyKeyPairFfi { ffiGeneratePasskeyKeypair() }
+    static func passkeyCosePublicKey(publicKeySec1: Data) throws -> Data { try ffiPasskeyCosePublicKey(publicKeySec1: publicKeySec1) }
+    static func passkeySign(privateKeyPkcs8: Data, data: Data) throws -> Data { try ffiPasskeySign(privateKeyPkcs8: privateKeyPkcs8, data: data) }
+
     static func recoveryAuthProof(recoveryKey: Data) throws -> Data { try ffiRecoveryAuthProof(recoveryKey: recoveryKey) }
     static func generateRecoveryKey() -> RecoveryKey { ffiGenerateRecoveryKey() }
     static func parseRecoveryKey(text: String) throws -> Data { try ffiParseRecoveryKey(text: text) }

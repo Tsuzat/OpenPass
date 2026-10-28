@@ -81,6 +81,23 @@ fn file_chunking_roundtrip_and_reorder_detection() {
 }
 
 #[test]
+fn passkey_es256_sign_verify_and_cose() {
+    let kp = generate_passkey_keypair();
+    assert_eq!(kp.public_key_sec1.len(), 65);
+    assert_eq!(kp.public_key_sec1[0], 0x04);
+    let cose = passkey_cose_public_key(&kp.public_key_sec1).unwrap();
+    assert_eq!(cose[0], 0xA5); // CBOR map(5)
+    assert!(cose.windows(32).any(|w| w == &kp.public_key_sec1[1..33]));
+
+    let data = b"authenticatorData || clientDataHash";
+    let sig = passkey_sign(&kp.private_key_pkcs8, data).unwrap();
+    assert!(passkey_verify(&kp.public_key_sec1, data, &sig).unwrap());
+    assert!(!passkey_verify(&kp.public_key_sec1, b"tampered", &sig).unwrap());
+    let other = generate_passkey_keypair();
+    assert!(!passkey_verify(&other.public_key_sec1, data, &sig).unwrap());
+}
+
+#[test]
 fn totp_base32_and_verify() {
     let secret = generate_totp_secret();
     let encoded = base32_encode(&secret);

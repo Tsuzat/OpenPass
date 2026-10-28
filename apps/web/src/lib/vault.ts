@@ -301,6 +301,15 @@ export async function exportPlaintextJson(): Promise<string> {
   return JSON.stringify({ format: "openpass-plaintext-export", version: 1, items: items.map((i) => i.plaintext) }, null, 2);
 }
 
+export async function createPasskeyItem(name: string, rpId: string, userName: string): Promise<void> {
+  const kp = await crypto.generatePasskey();
+  const credentialIdB64 = await crypto.randomKey();
+  await createItem("passkey", {
+    name, rpId, rpName: rpId, userName, credentialIdB64,
+    privateKeyPkcs8B64: kp.privateKeyPkcs8B64, counter: 0,
+  });
+}
+
 export const currentTotp = (secretB32: string) => crypto.totp(secretB32);
 export const makePassword = (length = 20) => crypto.makePassword(length);
 export const newTotpSecret = () => crypto.newTotpSecret();

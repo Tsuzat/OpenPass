@@ -148,6 +148,26 @@ pub fn derive_key_with_params(password: &str, params_json: &str) -> Result<Strin
     Ok(b64(&derive_master_key(password, &params).map_err(|_| JsValue::from_str("kdf failed"))?))
 }
 
+#[wasm_bindgen(js_name = generatePasskeyKeypair)]
+pub fn generate_passkey_keypair_js() -> Result<String, JsValue> {
+    let kp = crate::generate_passkey_keypair();
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Out { private_key_pkcs8_b64: String, public_key_sec1_b64: String, cose_public_key_b64: String }
+    json(&Out {
+        private_key_pkcs8_b64: b64(&kp.private_key_pkcs8),
+        public_key_sec1_b64: b64(&kp.public_key_sec1),
+        cose_public_key_b64: b64(&crate::passkey_cose_public_key(&kp.public_key_sec1).map_err(|_| JsValue::from_str("cose failed"))?),
+    })
+}
+
+#[wasm_bindgen(js_name = passkeySign)]
+pub fn passkey_sign_js(private_key_pkcs8_b64: &str, data_b64: &str) -> Result<String, JsValue> {
+    let sig = crate::passkey_sign(&unb64(private_key_pkcs8_b64)?, &unb64(data_b64)?)
+        .map_err(|_| JsValue::from_str("sign failed"))?;
+    Ok(b64(&sig))
+}
+
 #[wasm_bindgen(js_name = generateTotpSecretB32)]
 pub fn generate_totp_secret_b32() -> String {
     crate::base32_encode(&generate_totp_secret())

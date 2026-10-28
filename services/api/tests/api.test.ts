@@ -139,6 +139,23 @@ describe("password change + recovery", () => {
   });
 });
 
+describe("rate limiting (pluggable limiter)", () => {
+  test("custom limiter blocks login after threshold", async () => {
+    let calls = 0;
+    const app = createApp(new MemoryStore(), {
+      pbkdf2Iterations: 1_000,
+      rateLimiter: async () => { calls += 1; return calls > 3; },
+    });
+    await req(app, "/auth/register", "POST", registerBody());
+    let last = 0;
+    for (let i = 0; i < 4; i++) {
+      const r = await req(app, "/auth/login", "POST", { email: "user@example.com", authVerifierB64: VERIFIER, device: deviceA });
+      last = r.status;
+    }
+    expect(last).toBe(429);
+  });
+});
+
 describe("attachments", () => {
   test("upload/download/delete encrypted blob, owner-only", async () => {
     const app = setup();

@@ -43,6 +43,12 @@ object OpenPassCrypto {
     fun totp(secret: ByteArray, unixSeconds: Long, digits: UInt = 6u): String =
         ffiTotpAt(secret, unixSeconds.toULong(), 30u, digits, TotpAlgorithm.SHA1)
 
+    fun generatePasskeyKeypair() = app.openpass.core.ffi.ffiGeneratePasskeyKeypair()
+    fun passkeyCosePublicKey(publicKeySec1: ByteArray): ByteArray =
+        app.openpass.core.ffi.ffiPasskeyCosePublicKey(publicKeySec1)
+    fun passkeySign(privateKeyPkcs8: ByteArray, data: ByteArray): ByteArray =
+        app.openpass.core.ffi.ffiPasskeySign(privateKeyPkcs8, data)
+
     fun generatePassword(length: UInt = 20u): String = ffiGeneratePassword(length)
     fun generateRecoveryKey() = ffiGenerateRecoveryKey()
     fun recoveryAuthProof(recoveryKey: ByteArray): ByteArray =

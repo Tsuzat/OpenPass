@@ -30,6 +30,8 @@ export function encryptItem(vault_key_b64: string, item_id: string, plaintext_ut
 
 export function generateKdfParams(): string;
 
+export function generatePasskeyKeypair(): string;
+
 export function generatePassword(length: number): string;
 
 export function generateRecoveryKey(): string;
@@ -37,6 +39,8 @@ export function generateRecoveryKey(): string;
 export function generateTotpSecretB32(): string;
 
 export function parseRecoveryKey(text: string): string;
+
+export function passkeySign(private_key_pkcs8_b64: string, data_b64: string): string;
 
 export function randomKeyB64(): string;
 
@@ -62,10 +66,12 @@ export interface InitOutput {
     readonly encryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encryptItem: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly generateKdfParams: () => [number, number, number, number];
+    readonly generatePasskeyKeypair: () => [number, number, number, number];
     readonly generatePassword: (a: number) => [number, number];
     readonly generateRecoveryKey: () => [number, number, number, number];
     readonly generateTotpSecretB32: () => [number, number];
     readonly parseRecoveryKey: (a: number, b: number) => [number, number, number, number];
+    readonly passkeySign: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly randomKeyB64: () => [number, number];
     readonly recoveryAuthProof: (a: number, b: number) => [number, number, number, number];
     readonly totpAt: (a: number, b: number, c: bigint, d: bigint, e: number, f: number) => [number, number, number, number];

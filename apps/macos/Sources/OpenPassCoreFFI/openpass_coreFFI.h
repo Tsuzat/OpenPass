@@ -291,6 +291,12 @@ RustBuffer uniffi_openpass_core_fn_func_ffi_encrypt_file(RustBuffer file_key, Ru
 RustBuffer uniffi_openpass_core_fn_func_ffi_encrypt_item(RustBuffer vault_key, RustBuffer item_id, RustBuffer plaintext, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_GENERATE_PASSKEY_KEYPAIR
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_GENERATE_PASSKEY_KEYPAIR
+RustBuffer uniffi_openpass_core_fn_func_ffi_generate_passkey_keypair(RustCallStatus *_Nonnull out_status
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_GENERATE_PASSWORD
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_GENERATE_PASSWORD
 RustBuffer uniffi_openpass_core_fn_func_ffi_generate_password(uint32_t length, RustCallStatus *_Nonnull out_status
@@ -322,6 +328,16 @@ RustBuffer uniffi_openpass_core_fn_func_ffi_new_kdf_params(RustCallStatus *_Nonn
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PARSE_RECOVERY_KEY
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PARSE_RECOVERY_KEY
 RustBuffer uniffi_openpass_core_fn_func_ffi_parse_recovery_key(RustBuffer text, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PASSKEY_COSE_PUBLIC_KEY
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PASSKEY_COSE_PUBLIC_KEY
+RustBuffer uniffi_openpass_core_fn_func_ffi_passkey_cose_public_key(RustBuffer public_key_sec1, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PASSKEY_SIGN
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_PASSKEY_SIGN
+RustBuffer uniffi_openpass_core_fn_func_ffi_passkey_sign(RustBuffer private_key_pkcs8, RustBuffer data, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_RANDOM_KEY
@@ -678,6 +694,12 @@ uint16_t uniffi_openpass_core_checksum_func_ffi_encrypt_item(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_GENERATE_PASSKEY_KEYPAIR
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_GENERATE_PASSKEY_KEYPAIR
+uint16_t uniffi_openpass_core_checksum_func_ffi_generate_passkey_keypair(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_GENERATE_PASSWORD
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_GENERATE_PASSWORD
 uint16_t uniffi_openpass_core_checksum_func_ffi_generate_password(void
@@ -711,6 +733,18 @@ uint16_t uniffi_openpass_core_checksum_func_ffi_new_kdf_params(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PARSE_RECOVERY_KEY
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PARSE_RECOVERY_KEY
 uint16_t uniffi_openpass_core_checksum_func_ffi_parse_recovery_key(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PASSKEY_COSE_PUBLIC_KEY
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PASSKEY_COSE_PUBLIC_KEY
+uint16_t uniffi_openpass_core_checksum_func_ffi_passkey_cose_public_key(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PASSKEY_SIGN
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_PASSKEY_SIGN
+uint16_t uniffi_openpass_core_checksum_func_ffi_passkey_sign(void
     
 );
 #endif

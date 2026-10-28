@@ -11,10 +11,12 @@ export const encryptBytesB64: (a: number, b: number, c: number, d: number, e: nu
 export const encryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const encryptItem: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const generateKdfParams: () => [number, number, number, number];
+export const generatePasskeyKeypair: () => [number, number, number, number];
 export const generatePassword: (a: number) => [number, number];
 export const generateRecoveryKey: () => [number, number, number, number];
 export const generateTotpSecretB32: () => [number, number];
 export const parseRecoveryKey: (a: number, b: number) => [number, number, number, number];
+export const passkeySign: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const randomKeyB64: () => [number, number];
 export const recoveryAuthProof: (a: number, b: number) => [number, number, number, number];
 export const totpAt: (a: number, b: number, c: bigint, d: bigint, e: number, f: number) => [number, number, number, number];

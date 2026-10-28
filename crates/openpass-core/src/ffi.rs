@@ -122,6 +122,28 @@ pub fn ffi_decrypt_file(file_key: Vec<u8>, blob: Vec<u8>) -> Result<Vec<u8>, Ffi
     crate::decrypt_file(&key32(&file_key)?, &blob).map_err(FfiError::from)
 }
 
+#[derive(uniffi::Record)]
+pub struct PasskeyKeyPairFfi {
+    pub private_key_pkcs8: Vec<u8>,
+    pub public_key_sec1: Vec<u8>,
+}
+
+#[uniffi::export]
+pub fn ffi_generate_passkey_keypair() -> PasskeyKeyPairFfi {
+    let kp = crate::generate_passkey_keypair();
+    PasskeyKeyPairFfi { private_key_pkcs8: kp.private_key_pkcs8, public_key_sec1: kp.public_key_sec1 }
+}
+
+#[uniffi::export]
+pub fn ffi_passkey_cose_public_key(public_key_sec1: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::passkey_cose_public_key(&public_key_sec1).map_err(FfiError::from)
+}
+
+#[uniffi::export]
+pub fn ffi_passkey_sign(private_key_pkcs8: Vec<u8>, data: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::passkey_sign(&private_key_pkcs8, &data).map_err(FfiError::from)
+}
+
 #[uniffi::export]
 pub fn ffi_generate_totp_secret() -> Vec<u8> {
     generate_totp_secret()

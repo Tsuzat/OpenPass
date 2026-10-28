@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { checkHealth, getServerUrl, setServerUrl } from "./lib/api";
 import * as vault from "./lib/vault";
 
-type ItemKind = "login" | "card" | "secure_note" | "totp" | "identity" | "file";
+type ItemKind = "login" | "card" | "secure_note" | "totp" | "identity" | "file" | "passkey";
 const input = { display: "block", width: "100%", marginTop: 4 } as const;
 
 export default function App() {
@@ -13,6 +13,7 @@ export default function App() {
   const [recoveryInput, setRecoveryInput] = useState("");
   const [newPassword, setNewPassword] = useState("");
   const [search, setSearch] = useState("");
+  const [tagFilter, setTagFilter] = useState("");
   const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
   const [reveal, setReveal] = useState(false);
   const [pwChange, setPwChange] = useState({ current: "", next: "" });
@@ -30,7 +31,7 @@ export default function App() {
   const [items, setItems] = useState<vault.VaultItemSummary[]>([]);
   const [codes, setCodes] = useState<Record<string, string>>({});
   const [kind, setKind] = useState<ItemKind>("login");
-  const [form, setForm] = useState<Record<string, string>>({ name: "", username: "", password: "", uri: "", number: "", cardholder: "", expMonth: "", expYear: "", cvv: "", content: "", secretBase32: "", issuer: "", account: "", firstName: "", lastName: "", phone: "" });
+  const [form, setForm] = useState<Record<string, string>>({ name: "", tags: "", username: "", password: "", uri: "", number: "", cardholder: "", expMonth: "", expYear: "", cvv: "", content: "", secretBase32: "", issuer: "", account: "", firstName: "", lastName: "", phone: "" });
   const lockTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => { checkHealth().then(setHealthy); }, [server]);
@@ -59,7 +60,7 @@ export default function App() {
       cardholder: String(p.cardholder ?? ""), number: String(p.number ?? ""), expMonth: String(p.expMonth ?? ""),
       expYear: String(p.expYear ?? ""), cvv: String(p.cvv ?? ""), content: String(p.content ?? ""),
       issuer: String(p.issuer ?? ""), account: String(p.account ?? ""), secretBase32: String(p.secretBase32 ?? ""),
-      firstName: String(p.firstName ?? ""), lastName: String(p.lastName ?? ""), phone: String(p.phone ?? ""),
+      firstName: String(p.firstName ?? ""), lastName: String(p.lastName ?? ""), phone: String(p.phone ?? ""), tags: ((p.tags as string[] | undefined) ?? []).join(", "),
     });
   }, [selected]);
 
@@ -67,6 +68,12 @@ export default function App() {
     try { setItems(await vault.listItems()); setOffline(vault.isOffline()); }
     catch (e) { setError(String((e as Error).message)); }
   }, []);
+
+  const filteredItems = () => items.filter((i) => {
+    const matchesSearch = !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase());
+    const matchesTag = !tagFilter || (((i.plaintext.tags as string[] | undefined) ?? []).includes(tagFilter));
+    return matchesSearch && matchesTag;
+  });
 
   // Live TOTP codes for authenticator items (regenerated locally, seeds never leave the vault).
   useEffect(() => {
@@ -120,11 +127,12 @@ export default function App() {
     setBusy("Encrypting & syncing…");
     try {
       const f = form;
-      if (kind === "login") await vault.createItem("login", { name: f.name, username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
-      else if (kind === "card") await vault.createItem("card", { name: f.name, cardholder: f.cardholder, number: f.number, brand: "", expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv, notes: "" });
-      else if (kind === "secure_note") await vault.createItem("secure_note", { name: f.name, content: f.content });
-      else if (kind === "totp") await vault.createItem("totp", { name: f.name, issuer: f.issuer, account: f.account, secretBase32: f.secretBase32.replace(/\s/g, "").toUpperCase(), algorithm: "SHA1", digits: 6, period: 30 });
-      else await vault.createItem("identity", { name: f.name, firstName: f.firstName, lastName: f.lastName, email: f.account, phone: f.phone, address1: "", address2: "", city: "", state: "", postcode: "", country: "" });
+      if (kind === "login") await vault.createItem("login", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
+      else if (kind === "card") await vault.createItem("card", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, cardholder: f.cardholder, number: f.number, brand: "", expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv, notes: "" });
+      else if (kind === "secure_note") await vault.createItem("secure_note", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, content: f.content });
+      else if (kind === "totp") await vault.createItem("totp", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, issuer: f.issuer, account: f.account, secretBase32: f.secretBase32.replace(/\s/g, "").toUpperCase(), algorithm: "SHA1", digits: 6, period: 30 });
+      else if (kind === "passkey") await vault.createPasskeyItem(f.name, f.uri, f.username);
+      else await vault.createItem("identity", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, firstName: f.firstName, lastName: f.lastName, email: f.account, phone: f.phone, address1: "", address2: "", city: "", state: "", postcode: "", country: "" });
       setForm({ ...form, name: "", username: "", password: "", uri: "", number: "", content: "", secretBase32: "" });
       await refreshItems();
     } catch (e) { setError(String((e as Error).message)); } finally { setBusy(""); }
@@ -146,16 +154,28 @@ export default function App() {
         )}
         <input style={{ ...input, marginBottom: 12 }} placeholder="Search name, username, issuer…" value={search}
           onChange={(e) => setSearch(e.target.value)} />
-        <h2>Items ({items.filter((i) => !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase())).length})</h2>
+        {(() => {
+          const allTags = [...new Set(items.flatMap((i) => (i.plaintext.tags as string[] | undefined) ?? []))].sort();
+          return allTags.length ? (
+            <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 10 }}>
+              <button onClick={() => setTagFilter("")} disabled={!tagFilter}>All</button>
+              {allTags.map((tag) => (
+                <button key={tag} onClick={() => setTagFilter(tag === tagFilter ? "" : tag)} style={tag === tagFilter ? { fontWeight: 700 } : undefined}>#{tag}</button>
+              ))}
+            </div>
+          ) : null;
+        })()}
+        <h2>Items ({filteredItems().length})</h2>
         {items.length === 0 && <p>No items yet. Add one below — it is encrypted on this device before sync.</p>}
         <ul>
-          {items.filter((i) => !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase())).map((i) => (
+          {filteredItems().map((i) => (
             <li key={i.id} onClick={() => { setSelected(i); setReveal(false); }} style={{ cursor: "pointer" }}>
               <strong>{i.name}</strong> <span style={{ color: "#888" }}>{i.type}</span>
               {i.type === "login" && <span> — {String(i.plaintext.username ?? "")}</span>}
               {i.type === "card" && <span> — •••• {String(i.plaintext.number ?? "").slice(-4)}</span>}
               {i.type === "totp" && <span> — <code style={{ fontSize: 16 }}>{codes[i.id] ?? "······"}</code> <span style={{ color: "#888" }}>{String(i.plaintext.issuer ?? "")} {String(i.plaintext.account ?? "")}</span></span>}
               {i.type === "secure_note" && <span> — {String(i.plaintext.content ?? "").slice(0, 40)}…</span>}
+              {(((i.plaintext.tags as string[] | undefined) ?? []).length > 0) && <span style={{ color: "#06c" }}> {((i.plaintext.tags as string[]) ?? []).map((tg) => `#${tg}`).join(" ")}</span>}
             </li>
           ))}
         </ul>
@@ -197,6 +217,7 @@ export default function App() {
               <label>Last name<input style={input} value={editForm.lastName ?? ""} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></label>
               <label>Phone<input style={input} value={editForm.phone ?? ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></label>
             </>}
+            <label>Tags (comma separated)<input style={input} value={editForm.tags ?? ""} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} /></label>
             {selected.type === "file" && (
               <button onClick={async () => {
                 const f = await vault.downloadFile(selected);
@@ -209,7 +230,7 @@ export default function App() {
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button onClick={async () => {
                 const f = editForm;
-                const fields: Record<string, unknown> = { name: f.name };
+                const fields: Record<string, unknown> = { name: f.name, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean) };
                 if (selected.type === "login") Object.assign(fields, { username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [] });
                 if (selected.type === "card") Object.assign(fields, { cardholder: f.cardholder, number: f.number, expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv });
                 if (selected.type === "secure_note") Object.assign(fields, { content: f.content });
@@ -244,10 +265,11 @@ export default function App() {
           <select style={input} value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
             <option value="login">Login</option><option value="card">Payment card</option>
             <option value="secure_note">Secure note</option><option value="totp">Authenticator (TOTP)</option>
-            <option value="identity">Identity / address</option><option value="file">File</option>
+            <option value="identity">Identity / address</option><option value="file">File</option><option value="passkey">Passkey</option>
           </select>
         </label>
         <label>Name<input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
+        <label>Tags (comma separated)<input style={input} value={form.tags ?? ""} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="work, finance" /></label>
         {kind === "login" && <>
           <label>Username<input style={input} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
           <label>Password
@@ -281,6 +303,11 @@ export default function App() {
           <label>Last name<input style={input} value={form.lastName} onChange={(e) => setForm({ ...form, lastName: e.target.value })} /></label>
           <label>Email<input style={input} value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} /></label>
           <label>Phone<input style={input} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
+        </>}
+        {kind === "passkey" && <>
+          <label>Relying Party ID (e.g. github.com)<input style={input} value={form.uri} onChange={(e) => setForm({ ...form, uri: e.target.value })} /></label>
+          <label>Username at RP<input style={input} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
+          <p style={{ color: "#888", fontSize: 12 }}>Creates an encrypted synced-passkey item (ES256). Actual site registration happens through the OS credential providers — see docs/PASSKEYS.md.</p>
         </>}
         {kind === "file" ? (
           <label style={{ display: "block", marginTop: 8 }}>Choose file (max ~10 MB in web vault)
