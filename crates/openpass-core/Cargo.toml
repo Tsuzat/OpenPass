@@ -3,7 +3,21 @@ name = "openpass-core"
 version = "0.1.0"
 edition = "2021"
 license = "AGPL-3.0-or-later"
-description = "OpenPass shared cryptography core: KDF, key wrapping, item encryption, TOTP"
+description = "OpenPass shared cryptography core: KDF, wrapping, item encryption, TOTP"
+
+[lib]
+crate-type = ["cdylib", "staticlib", "rlib"]
+
+[features]
+default = []
+uniffi = ["dep:uniffi"]
+bindgen = ["uniffi/cli"]
+wasm = ["dep:wasm-bindgen"]
+
+[[bin]]
+name = "uniffi-bindgen"
+path = "src/bin/uniffi-bindgen.rs"
+required-features = ["bindgen"]
 
 [dependencies]
 argon2 = "0.5"
@@ -18,6 +32,11 @@ serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 base64ct = { version = "1", features = ["alloc"] }
 data-encoding = "2"
+uniffi = { version = "0.28", optional = true }
+wasm-bindgen = { version = "0.2", optional = true }
+
+[target.'cfg(target_arch = "wasm32")'.dependencies]
+getrandom = { version = "0.2", features = ["js"] }
 
 [dev-dependencies]
 hex = "0.4"

@@ -1,5 +1,17 @@
 //! OpenPass crypto core — spec: docs/CRYPTO.md
-//! FFI-friendly surface (UniFFI bindings are generated from these types).
+//! Native clients use the UniFFI surface (`ffi` module, feature `uniffi`);
+//! web/extension use the WASM surface (`wasm` module, feature `wasm`).
+
+#[cfg(feature = "uniffi")]
+mod ffi;
+#[cfg(feature = "uniffi")]
+pub use ffi::{FfiError, RecoveryKey};
+
+#[cfg(feature = "wasm")]
+mod wasm;
+
+#[cfg(feature = "uniffi")]
+uniffi::setup_scaffolding!();
 
 use argon2::{Algorithm, Argon2, Params, Version};
 use base64ct::{Base64, Encoding};
@@ -19,6 +31,7 @@ const AUTH_INFO: &[u8] = b"openpass/auth/v1";
 const KEK_INFO: &[u8] = b"openpass/kek/v1";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(rename_all = "camelCase")]
 pub struct KdfParams {
     pub memory_kib: u32,
@@ -140,6 +153,7 @@ pub fn decrypt_bytes(key: &[u8; 32], blob: &[u8], aad: &[u8]) -> Result<Vec<u8>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(rename_all = "camelCase")]
 pub struct EncryptedItem {
     /// base64: item encrypted under a random per-item key
@@ -203,6 +217,7 @@ pub fn base32_decode(text: &str) -> Result<Vec<u8>, Error> {
 }
 
 #[derive(Debug, Clone, Copy, PartialEq)]
+#[cfg_attr(feature = "uniffi", derive(uniffi::Enum))]
 pub enum TotpAlgorithm {
     Sha1,
     Sha256,

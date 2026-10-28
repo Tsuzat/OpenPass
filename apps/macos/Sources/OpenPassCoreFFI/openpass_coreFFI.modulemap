@@ -1,0 +1,4 @@
+module openpass_coreFFI {
+    header "openpass_coreFFI.h"
+    export *
+}

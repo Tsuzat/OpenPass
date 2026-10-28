@@ -8,8 +8,10 @@ your own Cloudflare account.
 
 ## Status
 
-Phase 0/1 in progress: crypto core + backend API implemented and tested.
-Native clients scaffolded. **Not yet audited — do not store real credentials.**
+Phase 2 in progress: crypto core + backend API implemented and tested; UniFFI (Swift/Kotlin)
+and WASM bindings generated from the same Rust core (`scripts/generate-bindings.sh`);
+web vault does real end-to-end encrypted register/login/sync.
+**Not yet audited — do not store real credentials.**
 
 ## Architecture
 
