@@ -187,7 +187,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     const body = RecoveryInfoRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const user = await store.getUserByEmail(body.data.email.toLowerCase());
-    if (!user || !user.recoveryVerifierHash || !(await verifyVerifier(body.data.recoveryAuthProofB64, user.recoveryVerifierHash))) {
+    if (!user?.recoveryVerifierHash || !(await verifyVerifier(body.data.recoveryAuthProofB64, user.recoveryVerifierHash))) {
       return err(c, 401, "INVALID_CREDENTIALS");
     }
     return c.json({ recoveryWrappedVaultKeyB64: user.recoveryWrappedVaultKeyB64, vaultId: user.vaultId });
@@ -201,7 +201,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     if (!body.success) return err(c, 400, "VALIDATION");
     const d = body.data;
     const user = await store.getUserByEmail(d.email.toLowerCase());
-    if (!user || !user.recoveryVerifierHash || !(await verifyVerifier(d.recoveryAuthProofB64, user.recoveryVerifierHash))) {
+    if (!user?.recoveryVerifierHash || !(await verifyVerifier(d.recoveryAuthProofB64, user.recoveryVerifierHash))) {
       return err(c, 401, "INVALID_CREDENTIALS");
     }
     await store.updateUserVerifier(user.id, await hashVerifier(d.newAuthVerifierB64, opts.pbkdf2Iterations),
