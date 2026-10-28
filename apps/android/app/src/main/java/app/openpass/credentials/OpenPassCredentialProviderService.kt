@@ -27,7 +27,13 @@ class OpenPassCredentialProviderService : CredentialProviderService() {
         cancellationSignal: CancellationSignal,
         callback: OutcomeReceiver<BeginGetCredentialResponse, GetCredentialException>,
     ) {
-        // TODO Phase 4: list matching passkey/password entries from the vault.
+        // For each vault passkey matching the requested rpId, a real implementation
+        // adds a PublicKeyCredentialEntry whose PendingIntent opens
+        // PasskeyAssertionActivity (biometric UV + signing happen there).
+        // Matching requires the decrypted vault index; when locked, return no
+        // entries rather than leaking which sites the user has passkeys for.
+        // TODO Phase 4: enumerate unlocked vault passkeys filtered by rpId from
+        // BeginGetPublicKeyCredentialOption.requestJson (allowCredentials + rpId).
         callback.onResult(BeginGetCredentialResponse())
     }
 

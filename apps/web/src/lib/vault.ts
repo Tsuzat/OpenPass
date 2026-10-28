@@ -178,13 +178,14 @@ export async function listItems(): Promise<VaultItemSummary[]> {
     if (item.deleted) continue;
     try {
       const plaintext = await crypto.decryptItemJson<Record<string, any>>(vaultKeyB64, item.id, item);
+      if (plaintext.system) continue; // internal system items (folders etc.) are not vault entries
       out.push({ id: item.id, type: item.type, revision: item.revision, name: String(plaintext.name ?? "(unnamed)"), plaintext });
     } catch { /* skip undecryptable items rather than crashing the vault */ }
   }
   return out.sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function createItem(type: string, plaintextFields: Record<string, unknown>): Promise<void> {
+export async function createItem(type: string, plaintextFields: Record<string, unknown>): Promise<string> {
   if (!vaultKeyB64) throw new Error("LOCKED");
   const id = uuid();
   const plaintext = { v: 1, type, favorite: false, folderId: null, tags: [], ...plaintextFields };
@@ -193,6 +194,44 @@ export async function createItem(type: string, plaintextFields: Record<string, u
     id, type, ...enc, revision: 1, deleted: false, updatedAt: new Date().toISOString(), dirty: true,
   });
   if (!offline) await syncPending().catch(() => undefined);
+  return id;
+}
+
+// ---------- Folders ----------
+// Folder definitions live in a dedicated encrypted system item, so folder names
+// sync end-to-end and never reach the server in plaintext. System items are
+// hidden from the item list.
+
+export interface Folder { id: string; name: string }
+const FOLDER_SYSTEM = "folders";
+
+async function findSystemItem(): Promise<{ summary: VaultItemSummary } | null> {
+  if (!vaultKeyB64) return null;
+  for (const item of await offlineStore.allItems()) {
+    if (item.deleted) continue;
+    try {
+      const plaintext = await crypto.decryptItemJson<Record<string, any>>(vaultKeyB64, item.id, item);
+      if (plaintext.system === FOLDER_SYSTEM) {
+        return { summary: { id: item.id, type: item.type, revision: item.revision, name: String(plaintext.name ?? ""), plaintext } };
+      }
+    } catch { /* skip */ }
+  }
+  return null;
+}
+
+export async function getFolders(): Promise<Folder[]> {
+  const found = await findSystemItem();
+  const folders = found?.summary.plaintext.folders;
+  return Array.isArray(folders) ? (folders as Folder[]) : [];
+}
+
+export async function setFolders(folders: Folder[]): Promise<void> {
+  const found = await findSystemItem();
+  if (found) {
+    await updateItem(found.summary, { folders, content: "" });
+  } else {
+    await createItem("secure_note", { name: "__openpass_folders__", system: FOLDER_SYSTEM, folders, content: "" });
+  }
 }
 
 export async function updateItem(item: VaultItemSummary, fields: Record<string, unknown>): Promise<void> {

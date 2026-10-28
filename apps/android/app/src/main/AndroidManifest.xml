@@ -22,6 +22,9 @@
             <meta-data android:name="android.autofill" android:resource="@xml/autofill_service" />
         </service>
 
+        <activity android:name=".credentials.PasskeyAssertionActivity"
+            android:exported="true" android:excludeFromRecents="true" />
+
         <!-- Passkey + password Credential Manager provider (Android 14+) -->
         <service android:name=".credentials.OpenPassCredentialProviderService"
             android:exported="true"

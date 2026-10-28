@@ -64,4 +64,15 @@ let bio = InMemoryBiometricKeyStore()
 try bio.saveWrappedVaultKey(Data([1, 2, 3]))
 check(try bio.loadWrappedVaultKey() == Data([1, 2, 3]), "biometric store roundtrip")
 
+// WebAuthn authenticator data
+let authData = WebAuthn.assertionAuthenticatorData(rpId: "github.com", flags: .syncedAssertion, signCount: 7)
+check(authData.count == 37, "assertion authData is 37 bytes")
+check(authData[32] == 0x1D, "assertion flags UP|UV|BE|BS = 0x1D")
+check(authData[36] == 7, "signCount big-endian")
+let regData = WebAuthn.registrationAuthenticatorData(rpId: "github.com", flags: .syncedAssertion, signCount: 0,
+                                                     credentialId: Data([0xAA, 0xBB]), cosePublicKey: Data([0xA5]))
+check(regData.count == 37 + 16 + 2 + 2 + 1 && regData[32] == 0x5D, "registration authData has AT flag + attested data")
+check(WebAuthn.rpIdMatches(requestRpId: "github.com", storedRpId: "github.com"), "rpId exact match")
+check(!WebAuthn.rpIdMatches(requestRpId: "github.com.evil.com", storedRpId: "github.com"), "rpId mismatch rejected")
+
 print("All VaultKit checks passed")

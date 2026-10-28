@@ -30,12 +30,27 @@ class MainActivity : ComponentActivity() {
         setContent {
             MaterialTheme {
                 var unlocked by remember { mutableStateOf(false) }
-                if (unlocked) VaultScreen(onLock = { vault.lock(); unlocked = false })
+                if (unlocked) VaultScreen(
+                    onLock = { vault.lock(); unlocked = false },
+                    loadItems = { done ->
+                        io.execute {
+                            val result = runCatching {
+                                val key = vault.currentVaultKey() ?: error("locked")
+                                val token = vault.accessToken ?: error("no session")
+                                app.openpass.core.ItemRepository(UrlConnectionVaultClient(SERVER_URL)).listSummaries(token, key)
+                            }
+                            runOnUiThread { done(result) }
+                        }
+                    },
+                )
                 else LockScreen(
                     onLogin = { email, password, done ->
                         io.execute {
                             val ok = runCatching { auth.login(email, password, android.os.Build.MODEL ?: "Android") }
-                                .map { session -> vault.unlockWithMasterKey { session.vaultKey } }
+                                .map { session ->
+                                    vault.accessToken = session.accessToken
+                                    vault.unlockWithMasterKey { session.vaultKey }
+                                }
                                 .getOrDefault(false)
                             runOnUiThread { done(ok) }
                         }
@@ -68,10 +83,28 @@ fun LockScreen(onLogin: (String, String, (Boolean) -> Unit) -> Unit, onBiometric
 }
 
 @Composable
-fun VaultScreen(onLock: () -> Unit) {
+fun VaultScreen(onLock: () -> Unit, loadItems: ((Result<List<app.openpass.core.VaultItemSummary>>) -> Unit) -> Unit) {
+    var summaries by remember { mutableStateOf<List<app.openpass.core.VaultItemSummary>>(emptyList()) }
+    var error by remember { mutableStateOf("") }
+    var search by remember { mutableStateOf("") }
+    LaunchedEffect(Unit) {
+        loadItems { result ->
+            result.onSuccess { summaries = it }.onFailure { error = it.message ?: "load failed" }
+        }
+    }
     Column(Modifier.padding(24.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Text("Vault", style = MaterialTheme.typography.headlineMedium)
-        Text("Unlocked. Item list decrypts via OpenPassCrypto + SyncEngine (repository wiring next).")
+        OutlinedTextField(search, { search = it }, label = { Text("Search") }, singleLine = true)
+        if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
+        summaries.filter { search.isEmpty() || it.name.contains(search, true) || it.username.contains(search, true) }
+            .forEach { item ->
+                Column {
+                    Text(item.name, style = MaterialTheme.typography.titleMedium)
+                    Text("${item.type}${if (item.username.isNotEmpty()) " — ${item.username}" else ""}",
+                        style = MaterialTheme.typography.bodySmall)
+                }
+            }
+        if (summaries.isEmpty() && error.isEmpty()) Text("No items yet (create them in the web vault).")
         Button(onClick = onLock) { Text("Lock") }
     }
 }

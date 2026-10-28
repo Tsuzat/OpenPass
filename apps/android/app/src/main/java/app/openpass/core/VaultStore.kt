@@ -16,6 +16,7 @@ class VaultStore(context: Context) {
         private set
 
     private var vaultKey: ByteArray? = null
+    @Volatile var accessToken: String? = null
     val biometricStore = BiometricVaultKeyStore(context.applicationContext)
     val fileStore = VaultFileStore(File(context.applicationContext.filesDir, "vault.json"))
 

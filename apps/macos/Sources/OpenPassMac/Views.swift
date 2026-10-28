@@ -36,27 +36,3 @@ struct LockView: View {
         .frame(minWidth: 420, minHeight: 320)
     }
 }
-
-struct VaultListView: View {
-    @EnvironmentObject var vault: VaultStore
-    var body: some View {
-        NavigationSplitView {
-            List {
-                Label("Logins", systemImage: "key")
-                Label("Cards", systemImage: "creditcard")
-                Label("Identities", systemImage: "person.text.rectangle")
-                Label("Secure Notes", systemImage: "note.text")
-                Label("Authenticator", systemImage: "number.circle")
-                Label("Passkeys", systemImage: "person.badge.key")
-                Label("Files", systemImage: "doc")
-            }
-        } detail: {
-            ContentUnavailableView("Phase 2", systemImage: "hammer",
-                                   description: Text("Item CRUD wires to the Rust core + sync API next. Lock from the menu bar to test auto-lock."))
-        }
-        .toolbar {
-            Button("Lock") { vault.lock() }
-        }
-        .frame(minWidth: 720, minHeight: 480)
-    }
-}

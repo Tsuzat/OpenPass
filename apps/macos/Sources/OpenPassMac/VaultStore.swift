@@ -68,6 +68,33 @@ final class VaultStore: ObservableObject {
         return try body(vaultKey)
     }
 
+    struct ItemSummary: Identifiable, Equatable {
+        let id: String; let name: String; let type: String; let username: String
+    }
+    @Published var items: [ItemSummary] = []
+
+    /// Fetch ciphertext items and decrypt summaries (name/type/username) in memory.
+    /// Full plaintext is decrypted on demand when an item is opened, never stored.
+    func refreshItems() async {
+        guard let accessToken, let vaultKey, let base = URL(string: serverURL) else { return }
+        do {
+            let resp = try await APIClient(baseURL: base).items(token: accessToken)
+            items = resp.items.filter { !$0.deleted }.compactMap { dto in
+                guard let ct = Data(base64Encoded: dto.ciphertextB64),
+                      let wrapped = Data(base64Encoded: dto.wrappedItemKeyB64) else { return nil }
+                let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
+                _ = ct; _ = wrapped
+                guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: dto.id, item: enc),
+                      let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
+                if obj["system"] != nil { return nil }
+                return ItemSummary(id: dto.id, name: obj["name"] as? String ?? "(unnamed)",
+                                   type: dto.type, username: obj["username"] as? String ?? "")
+            }.sorted { $0.name < $1.name }
+        } catch {
+            // Offline: VaultKit cache takes over in the Xcode wiring; keep current list.
+        }
+    }
+
     func lock() {
         isUnlocked = false
         accessToken = nil

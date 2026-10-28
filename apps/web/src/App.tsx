@@ -14,6 +14,9 @@ export default function App() {
   const [newPassword, setNewPassword] = useState("");
   const [search, setSearch] = useState("");
   const [tagFilter, setTagFilter] = useState("");
+  const [folderList, setFolderList] = useState<vault.Folder[]>([]);
+  const [folderFilter, setFolderFilter] = useState<string>(""); // "" all, "none" unfiled, else folder id
+  const [newFolder, setNewFolder] = useState("");
   const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
   const [reveal, setReveal] = useState(false);
   const [pwChange, setPwChange] = useState({ current: "", next: "" });
@@ -60,19 +63,25 @@ export default function App() {
       cardholder: String(p.cardholder ?? ""), number: String(p.number ?? ""), expMonth: String(p.expMonth ?? ""),
       expYear: String(p.expYear ?? ""), cvv: String(p.cvv ?? ""), content: String(p.content ?? ""),
       issuer: String(p.issuer ?? ""), account: String(p.account ?? ""), secretBase32: String(p.secretBase32 ?? ""),
-      firstName: String(p.firstName ?? ""), lastName: String(p.lastName ?? ""), phone: String(p.phone ?? ""), tags: ((p.tags as string[] | undefined) ?? []).join(", "),
+      firstName: String(p.firstName ?? ""), lastName: String(p.lastName ?? ""), phone: String(p.phone ?? ""), tags: ((p.tags as string[] | undefined) ?? []).join(", "), folderId: String(p.folderId ?? ""),
     });
   }, [selected]);
 
   const refreshItems = useCallback(async () => {
-    try { setItems(await vault.listItems()); setOffline(vault.isOffline()); }
+    try {
+      setItems(await vault.listItems()); setOffline(vault.isOffline());
+      setFolderList(await vault.getFolders());
+    }
     catch (e) { setError(String((e as Error).message)); }
   }, []);
 
   const filteredItems = () => items.filter((i) => {
     const matchesSearch = !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase());
     const matchesTag = !tagFilter || (((i.plaintext.tags as string[] | undefined) ?? []).includes(tagFilter));
-    return matchesSearch && matchesTag;
+    const matchesFolder = folderFilter === "" ? true
+      : folderFilter === "none" ? !i.plaintext.folderId
+      : i.plaintext.folderId === folderFilter;
+    return matchesSearch && matchesTag && matchesFolder;
   });
 
   // Live TOTP codes for authenticator items (regenerated locally, seeds never leave the vault).
@@ -127,12 +136,12 @@ export default function App() {
     setBusy("Encrypting & syncing…");
     try {
       const f = form;
-      if (kind === "login") await vault.createItem("login", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
-      else if (kind === "card") await vault.createItem("card", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, cardholder: f.cardholder, number: f.number, brand: "", expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv, notes: "" });
-      else if (kind === "secure_note") await vault.createItem("secure_note", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, content: f.content });
-      else if (kind === "totp") await vault.createItem("totp", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, issuer: f.issuer, account: f.account, secretBase32: f.secretBase32.replace(/\s/g, "").toUpperCase(), algorithm: "SHA1", digits: 6, period: 30 });
+      if (kind === "login") await vault.createItem("login", { folderId: f.folderId ? f.folderId : null, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
+      else if (kind === "card") await vault.createItem("card", { folderId: f.folderId ? f.folderId : null, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, cardholder: f.cardholder, number: f.number, brand: "", expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv, notes: "" });
+      else if (kind === "secure_note") await vault.createItem("secure_note", { folderId: f.folderId ? f.folderId : null, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, content: f.content });
+      else if (kind === "totp") await vault.createItem("totp", { folderId: f.folderId ? f.folderId : null, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, issuer: f.issuer, account: f.account, secretBase32: f.secretBase32.replace(/\s/g, "").toUpperCase(), algorithm: "SHA1", digits: 6, period: 30 });
       else if (kind === "passkey") await vault.createPasskeyItem(f.name, f.uri, f.username);
-      else await vault.createItem("identity", { tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, firstName: f.firstName, lastName: f.lastName, email: f.account, phone: f.phone, address1: "", address2: "", city: "", state: "", postcode: "", country: "" });
+      else await vault.createItem("identity", { folderId: f.folderId ? f.folderId : null, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), name: f.name, firstName: f.firstName, lastName: f.lastName, email: f.account, phone: f.phone, address1: "", address2: "", city: "", state: "", postcode: "", country: "" });
       setForm({ ...form, name: "", username: "", password: "", uri: "", number: "", content: "", secretBase32: "" });
       await refreshItems();
     } catch (e) { setError(String((e as Error).message)); } finally { setBusy(""); }
@@ -154,6 +163,25 @@ export default function App() {
         )}
         <input style={{ ...input, marginBottom: 12 }} placeholder="Search name, username, issuer…" value={search}
           onChange={(e) => setSearch(e.target.value)} />
+        <div style={{ display: "flex", gap: 6, flexWrap: "wrap", marginBottom: 8, alignItems: "center" }}>
+          <button onClick={() => setFolderFilter("")} style={folderFilter === "" ? { fontWeight: 700 } : undefined}>All items</button>
+          <button onClick={() => setFolderFilter("none")} style={folderFilter === "none" ? { fontWeight: 700 } : undefined}>Unfiled</button>
+          {folderList.map((f) => (
+            <span key={f.id}>
+              <button onClick={() => setFolderFilter(f.id)} style={folderFilter === f.id ? { fontWeight: 700 } : undefined}>📁 {f.name}</button>
+              <button title="Delete folder" onClick={async () => {
+                if (!confirm(`Delete folder "${f.name}"? Items keep existing but become unfiled on next edit.`)) return;
+                const next = folderList.filter((x) => x.id !== f.id);
+                await vault.setFolders(next); setFolderList(next); if (folderFilter === f.id) setFolderFilter("");
+              }}>×</button>
+            </span>
+          ))}
+          <input placeholder="New folder" value={newFolder} onChange={(e) => setNewFolder(e.target.value)} style={{ width: 110 }} />
+          <button disabled={!newFolder.trim()} onClick={async () => {
+            const next = [...folderList, { id: crypto.randomUUID(), name: newFolder.trim() }];
+            await vault.setFolders(next); setFolderList(next); setNewFolder("");
+          }}>Add folder</button>
+        </div>
         {(() => {
           const allTags = [...new Set(items.flatMap((i) => (i.plaintext.tags as string[] | undefined) ?? []))].sort();
           return allTags.length ? (
@@ -218,6 +246,12 @@ export default function App() {
               <label>Phone<input style={input} value={editForm.phone ?? ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></label>
             </>}
             <label>Tags (comma separated)<input style={input} value={editForm.tags ?? ""} onChange={(e) => setEditForm({ ...editForm, tags: e.target.value })} /></label>
+            <label>Folder
+              <select style={input} value={editForm.folderId ?? ""} onChange={(e) => setEditForm({ ...editForm, folderId: e.target.value })}>
+                <option value="">Unfiled</option>
+                {folderList.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+              </select>
+            </label>
             {selected.type === "file" && (
               <button onClick={async () => {
                 const f = await vault.downloadFile(selected);
@@ -230,7 +264,7 @@ export default function App() {
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button onClick={async () => {
                 const f = editForm;
-                const fields: Record<string, unknown> = { name: f.name, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean) };
+                const fields: Record<string, unknown> = { name: f.name, tags: (f.tags ?? "").split(",").map((tg) => tg.trim()).filter(Boolean), folderId: f.folderId ? f.folderId : null };
                 if (selected.type === "login") Object.assign(fields, { username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [] });
                 if (selected.type === "card") Object.assign(fields, { cardholder: f.cardholder, number: f.number, expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv });
                 if (selected.type === "secure_note") Object.assign(fields, { content: f.content });
@@ -270,6 +304,12 @@ export default function App() {
         </label>
         <label>Name<input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
         <label>Tags (comma separated)<input style={input} value={form.tags ?? ""} onChange={(e) => setForm({ ...form, tags: e.target.value })} placeholder="work, finance" /></label>
+        <label>Folder
+          <select style={input} value={form.folderId ?? ""} onChange={(e) => setForm({ ...form, folderId: e.target.value })}>
+            <option value="">Unfiled</option>
+            {folderList.map((f) => <option key={f.id} value={f.id}>{f.name}</option>)}
+          </select>
+        </label>
         {kind === "login" && <>
           <label>Username<input style={input} value={form.username} onChange={(e) => setForm({ ...form, username: e.target.value })} /></label>
           <label>Password

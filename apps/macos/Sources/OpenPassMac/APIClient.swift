@@ -36,6 +36,20 @@ struct APIClient {
         try await post("/auth/prelogin", ["email": email])
     }
 
+    struct CipherItemDTO: Decodable {
+        let id: String; let type: String; let ciphertextB64: String; let wrappedItemKeyB64: String
+        let revision: Int; let deleted: Bool; let updatedAt: String
+    }
+    struct ItemsResponse: Decodable { let items: [CipherItemDTO]; let cursor: String? }
+
+    func items(token: String) async throws -> ItemsResponse {
+        var req = URLRequest(url: baseURL.appendingPathComponent("/items"))
+        req.setValue("Bearer \(token)", forHTTPHeaderField: "Authorization")
+        let (data, response) = try await URLSession.shared.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw APIError.decoding }
+        return try JSONDecoder().decode(ItemsResponse.self, from: data)
+    }
+
     func login(email: String, authVerifier: Data, deviceId: String, deviceName: String) async throws -> LoginResponse {
         try await post("/auth/login", [
             "email": email,
