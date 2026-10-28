@@ -267,17 +267,28 @@ export async function exportEncrypted(exportPassword: string): Promise<string> {
   return JSON.stringify({ format: "openpass-export", version: 1, kdfParams: params, ciphertextB64 }, null, 2);
 }
 
-export async function importItems(items: Record<string, unknown>[]): Promise<number> {
-  let count = 0;
-  for (const item of items) {
-    const { type, ...fields } = item as { type: string };
-    await createItem(String(type), fields);
-    count++;
-  }
-  return count;
+export interface ImportReport { total: number; imported: number; skippedDuplicates: number }
+
+export async function previewImport(items: Record<string, unknown>[]): Promise<{ fresh: Record<string, unknown>[]; duplicates: Record<string, unknown>[] }> {
+  const { dedupeKey, partitionDuplicates } = await import("./import");
+  const existing = await listItems();
+  const existingKeys = new Set(existing.map((i) => dedupeKey({
+    type: i.type, name: i.name,
+    username: i.plaintext.username, uris: i.plaintext.uris,
+  })));
+  return partitionDuplicates(items, existingKeys);
 }
 
-export async function importEncryptedExport(text: string, exportPassword: string): Promise<number> {
+export async function importItems(items: Record<string, unknown>[], skipDuplicates = true): Promise<ImportReport> {
+  const { fresh, duplicates } = skipDuplicates ? await previewImport(items) : { fresh: items, duplicates: [] as Record<string, unknown>[] };
+  for (const item of fresh) {
+    const { type, ...fields } = item as { type: string };
+    await createItem(String(type), fields);
+  }
+  return { total: items.length, imported: fresh.length, skippedDuplicates: duplicates.length };
+}
+
+export async function importEncryptedExport(text: string, exportPassword: string): Promise<ImportReport> {
   const data = JSON.parse(text) as { format?: string; kdfParams: crypto.KdfParams; ciphertextB64: string };
   if (data.format !== "openpass-export") throw new Error("Not an OpenPass encrypted export");
   const keyB64 = await crypto.keyWithParams(exportPassword, data.kdfParams);

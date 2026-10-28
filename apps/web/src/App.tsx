@@ -19,6 +19,7 @@ export default function App() {
   const [editForm, setEditForm] = useState<Record<string, string>>({});
   const [transferPassword, setTransferPassword] = useState("");
   const [transferMsg, setTransferMsg] = useState("");
+  const [pendingImport, setPendingImport] = useState<{ fresh: Record<string, unknown>[]; duplicates: number; source: string } | null>(null);
   const [pwMsg, setPwMsg] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -318,35 +319,49 @@ export default function App() {
               setTransferMsg("Plaintext export downloaded — delete it as soon as you are done.");
             }}>Export plaintext (dangerous)</button>
             <label style={{ border: "1px solid #999", padding: "4px 8px", cursor: "pointer" }}>
-              Import Bitwarden JSON / CSV / OpenPass export
-              <input type="file" accept=".json,.csv" style={{ display: "none" }} onChange={async (e) => {
+              Import 1Password / Bitwarden / Zoho / CSV / OpenPass export
+              <input type="file" accept=".json,.csv,.1pux" style={{ display: "none" }} onChange={async (e) => {
                 const file = e.target.files?.[0];
+                e.target.value = "";
                 if (!file) return;
-                setTransferMsg("Importing…");
+                setTransferMsg("Parsing…");
                 try {
-                  const text = await file.text();
-                  let count: number;
-                  try {
-                    const head = JSON.parse(text) as { format?: string };
-                    if (head.format === "openpass-export") {
-                      if (!transferPassword) throw new Error("Enter the export password above first");
-                      count = await vault.importEncryptedExport(text, transferPassword);
-                    } else {
-                      const { parseImportFile } = await import("./lib/import");
-                      count = await vault.importItems(parseImportFile(file.name, text) as Record<string, unknown>[]);
-                    }
-                  } catch (parseErr) {
-                    const { parseImportFile } = await import("./lib/import");
-                    count = await vault.importItems(parseImportFile(file.name, text) as Record<string, unknown>[]);
-                    void parseErr;
+                  const bytes = new Uint8Array(await file.arrayBuffer());
+                  const text = new TextDecoder().decode(bytes);
+                  let head: { format?: string } | null = null;
+                  try { head = JSON.parse(text) as { format?: string }; } catch { /* not JSON */ }
+                  if (head?.format === "openpass-export") {
+                    if (!transferPassword) throw new Error("Enter the export password above first");
+                    const report = await vault.importEncryptedExport(text, transferPassword);
+                    setTransferMsg(`Imported ${report.imported} item(s), skipped ${report.skippedDuplicates} duplicate(s).`);
+                    await refreshItems();
+                    return;
                   }
-                  setTransferMsg(`Imported ${count} item(s).`);
-                  await refreshItems();
+                  const { parseImportBytes } = await import("./lib/import");
+                  const parsedItems = await parseImportBytes(file.name, bytes);
+                  const preview = await vault.previewImport(parsedItems as Record<string, unknown>[]);
+                  setPendingImport({ fresh: preview.fresh, duplicates: preview.duplicates.length, source: file.name });
+                  setTransferMsg("");
                 } catch (err) { setTransferMsg(`Import failed: ${(err as Error).message}`); }
               }} />
             </label>
           </div>
           {transferMsg && <p>{transferMsg}</p>}
+          {pendingImport && (
+            <div style={{ border: "1px solid #999", padding: 10, marginTop: 8 }}>
+              <strong>{pendingImport.source}</strong>: {pendingImport.fresh.length} new item(s)
+              {pendingImport.duplicates > 0 && <span>, {pendingImport.duplicates} duplicate(s) will be skipped (same type/name/username/site)</span>}
+              <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+                <button onClick={async () => {
+                  const report = await vault.importItems(pendingImport.fresh, false);
+                  setTransferMsg(`Imported ${report.imported} item(s) from ${pendingImport.source}.`);
+                  setPendingImport(null);
+                  await refreshItems();
+                }}>Import {pendingImport.fresh.length} item(s)</button>
+                <button onClick={() => setPendingImport(null)}>Cancel</button>
+              </div>
+            </div>
+          )}
         </details>
 
         <p style={{ color: "#888", fontSize: 12 }}>Auto-locks after 5 minutes of inactivity. Offline items queue locally and sync on next unlock.</p>
