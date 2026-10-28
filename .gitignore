@@ -24,3 +24,4 @@ apps/android/local.properties
 
 # Generated macOS frameworks (scripts/build-macos-core.sh)
 apps/macos/Frameworks/
+.swiftpm/
