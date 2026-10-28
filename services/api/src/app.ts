@@ -1,7 +1,16 @@
-import { Hono } from "hono";
+import { Hono, type Context, type Next } from "hono";
+import type { ContentfulStatusCode } from "hono/utils/http-status";
 import { cors } from "hono/cors";
 import { ChangePasswordRequest, CipherItem, LoginRequest, PreloginRequest, RecoverRequest, RecoveryInfoRequest, RegisterRequest, SyncPushRequest } from "@openpass/shared";
-import type { Store } from "./store/types";
+import type { SessionRow, Store, UserRow } from "./store/types";
+
+/** Authenticated principal attached to the context by requireAuth. */
+export interface AuthContext {
+  user: UserRow;
+  session: SessionRow;
+}
+type AppEnv = { Variables: { auth: AuthContext } };
+type AppContext = Context<AppEnv>;
 import { MemoryBlobStore, type BlobStore } from "./store/blobs";
 import { fakeSaltB64, hashVerifier, randomTokenB64, sha256Hex, verifyVerifier } from "./crypto";
 
@@ -20,7 +29,7 @@ const REFRESH_TTL = 30 * 24 * 60 * 60 * 1000;
 const DEFAULT_KDF = { memoryKib: 65536, iterations: 3, parallelism: 4 };
 
 export function createApp(store: Store, opts: AppOptions = {}) {
-  const app = new Hono();
+  const app = new Hono<AppEnv>();
   const now = opts.now ?? (() => Date.now());
   const attempts = new Map<string, { count: number; resetAt: number }>();
 
@@ -41,7 +50,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     e.count += 1;
     return e.count > limit;
   };
-  const err = (c: any, status: number, code: string, extra: object = {}) =>
+  const err = (c: AppContext, status: ContentfulStatusCode, code: string, extra: object = {}) =>
     c.json({ error: { code, ...extra } }, status);
 
   async function issueSession(userId: string, deviceId: string) {
@@ -56,7 +65,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     return { accessToken, refreshToken, sessionId: session.id };
   }
 
-  async function authUser(c: any) {
+  async function authUser(c: AppContext): Promise<AuthContext | null> {
     const header = c.req.header("Authorization") ?? "";
     if (!header.startsWith("Bearer ")) return null;
     const session = await store.getSessionByAccessHash(await sha256Hex(header.slice(7)));
@@ -64,10 +73,10 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     const user = await store.getUserById(session.userId);
     return user ? { user, session } : null;
   }
-  const requireAuth = async (c: any, next: any) => {
+  const requireAuth = async (c: AppContext, next: Next) => {
     const a = await authUser(c);
     if (!a) return err(c, 401, "UNAUTHORIZED");
-    (c as any).set("auth", a);
+    c.set("auth", a);
     await next();
   };
 
@@ -119,7 +128,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     if (!user || !(await verifyVerifier(d.authVerifierB64, user.verifierHash))) return err(c, 401, "INVALID_CREDENTIALS");
     const ts = new Date(now()).toISOString();
     const existing = await store.getDevice(user.id, d.device.id);
-    if (!existing || existing.status !== "approved") {
+    if (existing?.status !== "approved") {
       await store.upsertDevice({ userId: user.id, deviceId: d.device.id, name: d.device.name, platform: d.device.platform, status: "pending", createdAt: existing?.createdAt ?? ts, lastSeenAt: ts });
       await store.audit(user.id, "device_pending", d.device.id);
       return err(c, 403, "DEVICE_APPROVAL_REQUIRED", { deviceId: d.device.id });
@@ -160,7 +169,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.post("/auth/change-password", requireAuth, async (c) => {
-    const { user, session } = (c as any).get("auth");
+    const { user, session } = c.get("auth");
     const body = ChangePasswordRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const d = body.data;
@@ -203,13 +212,13 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.post("/auth/logout", requireAuth, async (c) => {
-    const { session } = (c as any).get("auth");
+    const { session } = c.get("auth");
     await store.revokeSession(session.id);
     return c.json({ ok: true });
   });
 
   app.get("/vault", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
+    const { user } = c.get("auth");
     return c.json({
       vaultId: user.vaultId, wrappedVaultKeyB64: user.wrappedVaultKeyB64,
       recoveryWrappedVaultKeyB64: user.recoveryWrappedVaultKeyB64,
@@ -218,19 +227,19 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.get("/devices", requireAuth, async (c) => {
-    const { user, session } = (c as any).get("auth");
+    const { user, session } = c.get("auth");
     const devices = await store.listDevices(user.id);
     return c.json({ devices: devices.map((d) => ({ ...d, current: d.deviceId === session.deviceId })) });
   });
 
   app.get("/devices/pending", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
+    const { user } = c.get("auth");
     return c.json({ devices: await store.listPendingDevices(user.id) });
   });
 
   app.post("/devices/:deviceId/approve", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const deviceId = c.req.param("deviceId");
+    const { user } = c.get("auth");
+    const deviceId = param(c, "deviceId");
     if (!(await store.getDevice(user.id, deviceId))) return err(c, 404, "NOT_FOUND");
     await store.setDeviceStatus(user.id, deviceId, "approved");
     await store.audit(user.id, "device_approved", deviceId);
@@ -238,13 +247,15 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.delete("/devices/:deviceId", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const deviceId = c.req.param("deviceId");
+    const { user } = c.get("auth");
+    const deviceId = param(c, "deviceId");
     await store.revokeDeviceSessions(user.id, deviceId);
     await store.deleteDevice(user.id, deviceId);
     await store.audit(user.id, "device_revoked", deviceId);
     return c.json({ ok: true });
   });
+
+  const param = (c: AppContext, name: string): string => c.req.param(name) ?? "";
 
   const publicItem = (i: Awaited<ReturnType<Store["listItemsSince"]>>[number]) => ({
     id: i.id, type: i.type, ciphertextB64: i.ciphertextB64, wrappedItemKeyB64: i.wrappedItemKeyB64,
@@ -266,14 +277,14 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   }
 
   app.get("/items", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
+    const { user } = c.get("auth");
     const items = await store.listItemsSince(user.vaultId, c.req.query("since") ?? null);
     return c.json({ items: items.map(publicItem), cursor: items.length ? items[items.length - 1].updatedAt : (c.req.query("since") ?? null) });
   });
 
   app.put("/items/:id", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const body = CipherItem.safeParse({ ...((await c.req.json().catch(() => null)) ?? {}), id: c.req.param("id") });
+    const { user } = c.get("auth");
+    const body = CipherItem.safeParse({ ...((await c.req.json().catch(() => null)) ?? {}), id: param(c, "id") });
     if (!body.success) return err(c, 400, "VALIDATION");
     const r = await upsertChecked(user, body.data);
     if (r.conflict) return err(c, 409, "REVISION_CONFLICT", { serverItem: r.conflict ? publicItem(r.conflict) : null });
@@ -281,7 +292,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.post("/sync/push", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
+    const { user } = c.get("auth");
     const body = SyncPushRequest.safeParse(await c.req.json().catch(() => null));
     if (!body.success) return err(c, 400, "VALIDATION");
     const results = [];
@@ -293,8 +304,8 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.delete("/items/:id", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const existing = await store.getItem(user.vaultId, c.req.param("id"));
+    const { user } = c.get("auth");
+    const existing = await store.getItem(user.vaultId, param(c, "id"));
     if (!existing) return err(c, 404, "NOT_FOUND");
     await store.addHistory(existing, new Date(now()).toISOString());
     await store.upsertItem({ ...existing, deleted: 1, revision: existing.revision + 1, updatedAt: new Date(now()).toISOString() });
@@ -302,8 +313,8 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.get("/items/:id/history", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const history = await store.listHistory(user.vaultId, c.req.param("id"));
+    const { user } = c.get("auth");
+    const history = await store.listHistory(user.vaultId, param(c, "id"));
     return c.json({
       history: history.map((h) => ({
         revision: h.revision, ciphertextB64: h.ciphertextB64, wrappedItemKeyB64: h.wrappedItemKeyB64,
@@ -318,7 +329,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   const maxBytes = opts.maxAttachmentBytes ?? 25 * 1024 * 1024;
 
   app.post("/attachments", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
+    const { user } = c.get("auth");
     const bytes = new Uint8Array(await c.req.arrayBuffer());
     if (bytes.length === 0) return err(c, 400, "VALIDATION");
     if (bytes.length > maxBytes) return err(c, 413, "VALIDATION", { message: `attachment exceeds ${maxBytes} bytes` });
@@ -330,8 +341,8 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.get("/attachments/:id", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const meta = await store.getAttachment(user.id, c.req.param("id"));
+    const { user } = c.get("auth");
+    const meta = await store.getAttachment(user.id, param(c, "id"));
     if (!meta) return err(c, 404, "NOT_FOUND");
     const bytes = await blobs.get(`${user.id}/${meta.id}`);
     if (!bytes) return err(c, 404, "NOT_FOUND");
@@ -341,8 +352,8 @@ export function createApp(store: Store, opts: AppOptions = {}) {
   });
 
   app.delete("/attachments/:id", requireAuth, async (c) => {
-    const { user } = (c as any).get("auth");
-    const meta = await store.getAttachment(user.id, c.req.param("id"));
+    const { user } = c.get("auth");
+    const meta = await store.getAttachment(user.id, param(c, "id"));
     if (!meta) return err(c, 404, "NOT_FOUND");
     await blobs.delete(`${user.id}/${meta.id}`);
     await store.deleteAttachment(user.id, meta.id);
