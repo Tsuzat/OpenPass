@@ -13,3 +13,4 @@ DerivedData/
 # Agent tooling (not part of the project)
 .agents/
 skills-lock.json
+.build/

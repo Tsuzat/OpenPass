@@ -255,6 +255,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     const existing = await store.getItem(user.vaultId, item.id);
     const expected = existing ? existing.revision + 1 : 1;
     if (item.revision !== expected) return { conflict: existing };
+    if (existing) await store.addHistory(existing, new Date(now()).toISOString());
     const row = {
       id: item.id, vaultId: user.vaultId, userId: user.id, type: item.type,
       ciphertextB64: item.ciphertextB64, wrappedItemKeyB64: item.wrappedItemKeyB64,
@@ -295,8 +296,20 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     const { user } = (c as any).get("auth");
     const existing = await store.getItem(user.vaultId, c.req.param("id"));
     if (!existing) return err(c, 404, "NOT_FOUND");
+    await store.addHistory(existing, new Date(now()).toISOString());
     await store.upsertItem({ ...existing, deleted: 1, revision: existing.revision + 1, updatedAt: new Date(now()).toISOString() });
     return c.json({ ok: true, revision: existing.revision + 1 });
+  });
+
+  app.get("/items/:id/history", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const history = await store.listHistory(user.vaultId, c.req.param("id"));
+    return c.json({
+      history: history.map((h) => ({
+        revision: h.revision, ciphertextB64: h.ciphertextB64, wrappedItemKeyB64: h.wrappedItemKeyB64,
+        deleted: h.deleted === 1, updatedAt: h.updatedAt,
+      })),
+    });
   });
 
   // Encrypted file blobs. Body is chunked-AEAD ciphertext produced by the Rust core;

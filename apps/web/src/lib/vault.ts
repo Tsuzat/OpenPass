@@ -246,6 +246,59 @@ export async function updateItem(item: VaultItemSummary, fields: Record<string, 
   if (!offline) await syncPending().catch(() => undefined);
 }
 
+export async function listTrash(): Promise<VaultItemSummary[]> {
+  if (!vaultKeyB64) throw new Error("LOCKED");
+  if (!offline && accessToken) {
+    try { await pullMerge(); } catch { /* serve from cache */ }
+  }
+  const out: VaultItemSummary[] = [];
+  for (const item of await offlineStore.allItems()) {
+    if (!item.deleted) continue;
+    try {
+      const plaintext = await crypto.decryptItemJson<Record<string, any>>(vaultKeyB64, item.id, item);
+      if (plaintext.system) continue;
+      out.push({ id: item.id, type: item.type, revision: item.revision, name: String(plaintext.name ?? "(unnamed)"), plaintext });
+    } catch { /* skip */ }
+  }
+  return out;
+}
+
+export async function restoreItem(id: string): Promise<void> {
+  const cached = (await offlineStore.allItems()).find((i) => i.id === id);
+  if (!cached || !cached.deleted) return;
+  await offlineStore.putItem({ ...cached, deleted: false, revision: cached.revision + 1, dirty: true, updatedAt: new Date().toISOString() });
+  if (!offline) await syncPending().catch(() => undefined);
+}
+
+/** Local purge: removes the row on this device. The server tombstone remains, by design. */
+export async function purgeItem(id: string): Promise<void> {
+  await offlineStore.removeItem(id);
+}
+
+export interface HistoryEntry { revision: number; updatedAt: string; plaintext: Record<string, any> }
+
+export async function getItemHistory(id: string): Promise<HistoryEntry[]> {
+  if (!vaultKeyB64 || !accessToken) throw new Error("LOCKED");
+  const data = await api(`/items/${id}/history`, "GET", undefined, true);
+  const out: HistoryEntry[] = [];
+  for (const h of data.history as any[]) {
+    try {
+      const plaintext = await crypto.decryptItemJson<Record<string, any>>(vaultKeyB64, id, h);
+      out.push({ revision: h.revision, updatedAt: h.updatedAt, plaintext });
+    } catch { /* skip */ }
+  }
+  return out;
+}
+
+export async function restoreHistoryVersion(id: string, entry: HistoryEntry): Promise<void> {
+  const cached = (await offlineStore.allItems()).find((i) => i.id === id);
+  if (!cached || !vaultKeyB64) throw new Error("NOT_FOUND");
+  const enc = await crypto.encryptItemJson(vaultKeyB64, id, entry.plaintext);
+  const revision = cached.dirty ? cached.revision : cached.revision + 1;
+  await offlineStore.putItem({ ...cached, ...enc, revision, deleted: false, dirty: true, updatedAt: new Date().toISOString() });
+  if (!offline) await syncPending().catch(() => undefined);
+}
+
 export async function deleteItem(id: string): Promise<void> {
   const cached = (await offlineStore.allItems()).find((i) => i.id === id);
   if (!cached) return;

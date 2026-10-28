@@ -156,6 +156,25 @@ describe("rate limiting (pluggable limiter)", () => {
   });
 });
 
+describe("item history", () => {
+  test("previous revisions archived on update and delete", async () => {
+    const app = setup();
+    const reg = await req(app, "/auth/register", "POST", registerBody());
+    const token = reg.json.accessToken;
+    const id = crypto.randomUUID();
+    await req(app, `/items/${id}`, "PUT", { id, type: "login", ciphertextB64: "djE=", wrappedItemKeyB64: "a2V5", revision: 1 }, token);
+    await req(app, `/items/${id}`, "PUT", { id, type: "login", ciphertextB64: "djI=", wrappedItemKeyB64: "a2V5", revision: 2 }, token);
+    let hist = await req(app, `/items/${id}/history`, "GET", undefined, token);
+    expect(hist.json.history).toHaveLength(1);
+    expect(hist.json.history[0]).toMatchObject({ revision: 1, ciphertextB64: "djE=" });
+
+    await req(app, `/items/${id}`, "DELETE", undefined, token);
+    hist = await req(app, `/items/${id}/history`, "GET", undefined, token);
+    expect(hist.json.history).toHaveLength(2);
+    expect(hist.json.history[0].revision).toBe(2);
+  });
+});
+
 describe("attachments", () => {
   test("upload/download/delete encrypted blob, owner-only", async () => {
     const app = setup();

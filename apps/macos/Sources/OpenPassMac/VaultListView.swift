@@ -30,9 +30,21 @@ struct VaultListView: View {
                 VStack(alignment: .leading, spacing: 12) {
                     Text(selected.name).font(.title2).bold()
                     Text(selected.type).foregroundStyle(.secondary)
-                    if !selected.username.isEmpty { Text("Username: \(selected.username)") }
-                    Text("Full details decrypt on demand via OpenPassCrypto in the item view (next iteration).")
-                        .foregroundStyle(.secondary)
+                    if let details = vault.decryptDetails(id: selected.id) {
+                        ForEach(details.sorted(by: { $0.key < $1.key }), id: \.key) { key, value in
+                            if !value.isEmpty && key != "name" {
+                                HStack(alignment: .top) {
+                                    Text(key).foregroundStyle(.secondary).frame(width: 110, alignment: .leading)
+                                    Text(key == "password" || key == "cvv" ? String(repeating: "•", count: min(value.count, 12)) : value)
+                                        .textSelection(.enabled)
+                                }
+                            }
+                        }
+                        Text("Sensitive fields are masked in this summary. Reveal/copy actions arrive with the secure detail editor.")
+                            .font(.caption).foregroundStyle(.secondary)
+                    } else {
+                        Text("Could not decrypt this item.").foregroundStyle(.red)
+                    }
                 }
                 .padding()
                 .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)

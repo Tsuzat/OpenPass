@@ -4,6 +4,7 @@ import android.os.Bundle
 import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.layout.*
 import androidx.compose.material3.*
 import androidx.compose.runtime.*
@@ -87,6 +88,8 @@ fun VaultScreen(onLock: () -> Unit, loadItems: ((Result<List<app.openpass.core.V
     var summaries by remember { mutableStateOf<List<app.openpass.core.VaultItemSummary>>(emptyList()) }
     var error by remember { mutableStateOf("") }
     var search by remember { mutableStateOf("") }
+    var selected by remember { mutableStateOf<app.openpass.core.VaultItemSummary?>(null) }
+    var reveal by remember { mutableStateOf(false) }
     LaunchedEffect(Unit) {
         loadItems { result ->
             result.onSuccess { summaries = it }.onFailure { error = it.message ?: "load failed" }
@@ -98,12 +101,29 @@ fun VaultScreen(onLock: () -> Unit, loadItems: ((Result<List<app.openpass.core.V
         if (error.isNotEmpty()) Text(error, color = MaterialTheme.colorScheme.error)
         summaries.filter { search.isEmpty() || it.name.contains(search, true) || it.username.contains(search, true) }
             .forEach { item ->
-                Column {
+                Column(Modifier.clickable { selected = item; reveal = false }) {
                     Text(item.name, style = MaterialTheme.typography.titleMedium)
                     Text("${item.type}${if (item.username.isNotEmpty()) " — ${item.username}" else ""}",
                         style = MaterialTheme.typography.bodySmall)
                 }
             }
+        selected?.let { item ->
+            val p = item.plaintext
+            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(item.name, style = MaterialTheme.typography.titleLarge)
+                if (item.type == "login") {
+                    Text("Username: ${p.optString("username")}")
+                    Text("Password: ${if (reveal) p.optString("password") else "••••••••"}")
+                    OutlinedButton(onClick = { reveal = !reveal }) { Text(if (reveal) "Hide" else "Reveal") }
+                    val uris = p.optJSONArray("uris")
+                    if (uris != null && uris.length() > 0) Text("URL: ${uris.getJSONObject(0).optString("uri")}")
+                }
+                if (item.type == "secure_note") Text(p.optString("content"))
+                if (item.type == "card") Text("Card: •••• ${p.optString("number").takeLast(4)}")
+                if (item.type == "totp") Text("Authenticator code is generated in the TOTP screen (Rust core).")
+                OutlinedButton(onClick = { selected = null }) { Text("Close") }
+            }
+        }
         if (summaries.isEmpty() && error.isEmpty()) Text("No items yet (create them in the web vault).")
         Button(onClick = onLock) { Text("Lock") }
     }

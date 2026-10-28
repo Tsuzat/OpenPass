@@ -72,6 +72,7 @@ final class VaultStore: ObservableObject {
         let id: String; let name: String; let type: String; let username: String
     }
     @Published var items: [ItemSummary] = []
+    private var ciphertextById: [String: APIClient.CipherItemDTO] = [:]
 
     /// Fetch ciphertext items and decrypt summaries (name/type/username) in memory.
     /// Full plaintext is decrypted on demand when an item is opened, never stored.
@@ -79,6 +80,7 @@ final class VaultStore: ObservableObject {
         guard let accessToken, let vaultKey, let base = URL(string: serverURL) else { return }
         do {
             let resp = try await APIClient(baseURL: base).items(token: accessToken)
+            ciphertextById = Dictionary(uniqueKeysWithValues: resp.items.map { ($0.id, $0) })
             items = resp.items.filter { !$0.deleted }.compactMap { dto in
                 guard let ct = Data(base64Encoded: dto.ciphertextB64),
                       let wrapped = Data(base64Encoded: dto.wrappedItemKeyB64) else { return nil }
@@ -100,6 +102,23 @@ final class VaultStore: ObservableObject {
         accessToken = nil
         vaultKey = nil // Data release; Rust-side keys are zeroized by the core on drop
         autoLockTask?.cancel()
+    }
+
+    /// Decrypt one item's full plaintext on open. Result is a flat string map for
+    /// display; it lives in view state only and is dropped on selection change/lock.
+    func decryptDetails(id: String) -> [String: String]? {
+        guard let dto = ciphertextById[id], let vaultKey else { return nil }
+        let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
+        guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: id, item: enc),
+              let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
+        var out: [String: String] = [:]
+        for (k, v) in obj {
+            if let s = v as? String { out[k] = s }
+            else if let n = v as? NSNumber { out[k] = n.stringValue }
+            else if let arr = v as? [[String: Any]], k == "uris" { out[k] = arr.compactMap { $0["uri"] as? String }.joined(separator: ", ") }
+            else if let tags = v as? [String] { out[k] = tags.map { "#\($0)" }.joined(separator: " ") }
+        }
+        return out
     }
 
     private func scheduleAutoLock(minutes: Int) {

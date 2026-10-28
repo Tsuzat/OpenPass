@@ -41,6 +41,11 @@ export class MemoryStore implements Store {
   async revokeOtherSessions(userId: string, keepSessionId: string | null) {
     for (const s of this.sessions.values()) if (s.userId === userId && s.id !== keepSessionId) s.revoked = 1;
   }
+  history: ItemRow[] = [];
+  async addHistory(item: ItemRow) { this.history.push({ ...item }); }
+  async listHistory(vaultId: string, itemId: string) {
+    return this.history.filter((h) => h.vaultId === vaultId && h.id === itemId).sort((a, b) => b.revision - a.revision);
+  }
   async createAttachment(a: AttachmentRow) { this.attachments.set(a.id, a); }
   async getAttachment(userId: string, id: string) { const a = this.attachments.get(id); return a && a.userId === userId ? a : null; }
   async deleteAttachment(userId: string, id: string) { const a = this.attachments.get(id); if (a && a.userId === userId) this.attachments.delete(id); }

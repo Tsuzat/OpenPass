@@ -17,6 +17,8 @@ export default function App() {
   const [folderList, setFolderList] = useState<vault.Folder[]>([]);
   const [folderFilter, setFolderFilter] = useState<string>(""); // "" all, "none" unfiled, else folder id
   const [newFolder, setNewFolder] = useState("");
+  const [trash, setTrash] = useState<vault.VaultItemSummary[]>([]);
+  const [history, setHistory] = useState<vault.HistoryEntry[]>([]);
   const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
   const [reveal, setReveal] = useState(false);
   const [pwChange, setPwChange] = useState({ current: "", next: "" });
@@ -71,6 +73,7 @@ export default function App() {
     try {
       setItems(await vault.listItems()); setOffline(vault.isOffline());
       setFolderList(await vault.getFolders());
+      setTrash(await vault.listTrash().catch(() => []));
     }
     catch (e) { setError(String((e as Error).message)); }
   }, []);
@@ -261,6 +264,15 @@ export default function App() {
                 URL.revokeObjectURL(a.href);
               }}>Download decrypted file ({String(selected.plaintext.sizeBytes ?? "?")} bytes)</button>
             )}
+            <div style={{ marginTop: 8 }}>
+              <button onClick={async () => setHistory(await vault.getItemHistory(selected.id).catch(() => []))}>Load history</button>
+              {history.map((h) => (
+                <div key={h.revision} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                  <span>rev {h.revision} · {h.updatedAt} · {String(h.plaintext.name ?? "")}</span>
+                  <button onClick={async () => { await vault.restoreHistoryVersion(selected.id, h); setSelected(null); setHistory([]); await refreshItems(); }}>Restore this version</button>
+                </div>
+              ))}
+            </div>
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button onClick={async () => {
                 const f = editForm;
@@ -364,6 +376,20 @@ export default function App() {
         )}
         {busy && <p>{busy}</p>}
         {error && <p style={{ color: "#c00" }}>{error}</p>}
+        {trash.length > 0 && (
+          <details style={{ marginTop: 16 }}>
+            <summary>Trash ({trash.length})</summary>
+            {trash.map((i) => (
+              <div key={i.id} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+                <span>{i.name} <span style={{ color: "#888" }}>{i.type}</span></span>
+                <button onClick={async () => { await vault.restoreItem(i.id); await refreshItems(); }}>Restore</button>
+                <button onClick={async () => { await vault.purgeItem(i.id); await refreshItems(); }}>Remove from this device</button>
+              </div>
+            ))}
+            <p style={{ color: "#888", fontSize: 12 }}>Restoring syncs the item back to all devices. Removing only clears this device; the server tombstone remains.</p>
+          </details>
+        )}
+
         <details style={{ marginTop: 16 }}>
           <summary>Import / Export</summary>
           <label>Export / import password (for encrypted OpenPass exports only)

@@ -45,6 +45,8 @@ export interface Store {
   revokeSession(id: string): Promise<void>;
   revokeDeviceSessions(userId: string, deviceId: string): Promise<void>;
   revokeOtherSessions(userId: string, keepSessionId: string | null): Promise<void>;
+  addHistory(item: ItemRow, archivedAt: string): Promise<void>;
+  listHistory(vaultId: string, itemId: string): Promise<ItemRow[]>;
   createAttachment(a: AttachmentRow): Promise<void>;
   getAttachment(userId: string, id: string): Promise<AttachmentRow | null>;
   deleteAttachment(userId: string, id: string): Promise<void>;
