@@ -15,6 +15,10 @@ export interface SessionRow {
   accessHash: string; refreshHash: string; prevRefreshHash: string | null;
   accessExpiresAt: number; refreshExpiresAt: number; revoked: number; createdAt: string;
 }
+export interface AttachmentRow {
+  id: string; userId: string; vaultId: string; sizeBytes: number; createdAt: string;
+}
+
 export interface ItemRow {
   id: string; vaultId: string; userId: string; type: string;
   ciphertextB64: string; wrappedItemKeyB64: string;
@@ -41,6 +45,9 @@ export interface Store {
   revokeSession(id: string): Promise<void>;
   revokeDeviceSessions(userId: string, deviceId: string): Promise<void>;
   revokeOtherSessions(userId: string, keepSessionId: string | null): Promise<void>;
+  createAttachment(a: AttachmentRow): Promise<void>;
+  getAttachment(userId: string, id: string): Promise<AttachmentRow | null>;
+  deleteAttachment(userId: string, id: string): Promise<void>;
   getItem(vaultId: string, itemId: string): Promise<ItemRow | null>;
   upsertItem(i: ItemRow): Promise<void>;
   listItemsSince(vaultId: string, sinceIso: string | null): Promise<ItemRow[]>;

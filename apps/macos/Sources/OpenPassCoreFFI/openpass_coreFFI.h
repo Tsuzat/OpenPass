@@ -256,6 +256,16 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
 RustBuffer uniffi_openpass_core_fn_func_ffi_auth_verifier(RustBuffer master_key, RustBuffer params, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_BYTES
+RustBuffer uniffi_openpass_core_fn_func_ffi_decrypt_bytes(RustBuffer key, RustBuffer blob, RustBuffer aad, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_FILE
+RustBuffer uniffi_openpass_core_fn_func_ffi_decrypt_file(RustBuffer file_key, RustBuffer blob, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_ITEM
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_ITEM
 RustBuffer uniffi_openpass_core_fn_func_ffi_decrypt_item(RustBuffer vault_key, RustBuffer item_id, RustBuffer item, RustCallStatus *_Nonnull out_status
@@ -264,6 +274,16 @@ RustBuffer uniffi_openpass_core_fn_func_ffi_decrypt_item(RustBuffer vault_key, R
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DERIVE_MASTER_KEY
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DERIVE_MASTER_KEY
 RustBuffer uniffi_openpass_core_fn_func_ffi_derive_master_key(RustBuffer password, RustBuffer params, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_ENCRYPT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_ENCRYPT_BYTES
+RustBuffer uniffi_openpass_core_fn_func_ffi_encrypt_bytes(RustBuffer key, RustBuffer plaintext, RustBuffer aad, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_ENCRYPT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_ENCRYPT_FILE
+RustBuffer uniffi_openpass_core_fn_func_ffi_encrypt_file(RustBuffer file_key, RustBuffer plaintext, RustCallStatus *_Nonnull out_status
 );
 #endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_ENCRYPT_ITEM
@@ -616,6 +636,18 @@ uint16_t uniffi_openpass_core_checksum_func_ffi_auth_verifier(void
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_BYTES
+uint16_t uniffi_openpass_core_checksum_func_ffi_decrypt_bytes(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_FILE
+uint16_t uniffi_openpass_core_checksum_func_ffi_decrypt_file(void
+    
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_ITEM
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DECRYPT_ITEM
 uint16_t uniffi_openpass_core_checksum_func_ffi_decrypt_item(void
@@ -625,6 +657,18 @@ uint16_t uniffi_openpass_core_checksum_func_ffi_decrypt_item(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DERIVE_MASTER_KEY
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_DERIVE_MASTER_KEY
 uint16_t uniffi_openpass_core_checksum_func_ffi_derive_master_key(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_ENCRYPT_BYTES
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_ENCRYPT_BYTES
+uint16_t uniffi_openpass_core_checksum_func_ffi_encrypt_bytes(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_ENCRYPT_FILE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_ENCRYPT_FILE
+uint16_t uniffi_openpass_core_checksum_func_ffi_encrypt_file(void
     
 );
 #endif

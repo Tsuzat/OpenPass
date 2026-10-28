@@ -2,12 +2,15 @@ import { Hono } from "hono";
 import { cors } from "hono/cors";
 import { ChangePasswordRequest, CipherItem, LoginRequest, PreloginRequest, RecoverRequest, RecoveryInfoRequest, RegisterRequest, SyncPushRequest } from "@openpass/shared";
 import type { Store } from "./store/types";
+import { MemoryBlobStore, type BlobStore } from "./store/blobs";
 import { fakeSaltB64, hashVerifier, randomTokenB64, sha256Hex, verifyVerifier } from "./crypto";
 
 export interface AppOptions {
   allowRegistration?: boolean;
   pbkdf2Iterations?: number;
   now?: () => number;
+  blobs?: BlobStore;
+  maxAttachmentBytes?: number;
 }
 
 const ACCESS_TTL = 15 * 60 * 1000;
@@ -293,7 +296,43 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     return c.json({ ok: true, revision: existing.revision + 1 });
   });
 
-  app.post("/attachments/presign", requireAuth, (c) => err(c, 501, "NOT_FOUND", { message: "File attachments land in Phase 3 (R2 chunked AEAD)" }));
+  // Encrypted file blobs. Body is chunked-AEAD ciphertext produced by the Rust core;
+  // the server cannot inspect content. Metadata in D1, bytes in R2 (or memory in tests).
+  const blobs: BlobStore = opts.blobs ?? new MemoryBlobStore();
+  const maxBytes = opts.maxAttachmentBytes ?? 25 * 1024 * 1024;
+
+  app.post("/attachments", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const bytes = new Uint8Array(await c.req.arrayBuffer());
+    if (bytes.length === 0) return err(c, 400, "VALIDATION");
+    if (bytes.length > maxBytes) return err(c, 413, "VALIDATION", { message: `attachment exceeds ${maxBytes} bytes` });
+    const id = crypto.randomUUID();
+    await blobs.put(`${user.id}/${id}`, bytes);
+    await store.createAttachment({ id, userId: user.id, vaultId: user.vaultId, sizeBytes: bytes.length, createdAt: new Date(now()).toISOString() });
+    await store.audit(user.id, "attachment_uploaded", id);
+    return c.json({ id, sizeBytes: bytes.length }, 201);
+  });
+
+  app.get("/attachments/:id", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const meta = await store.getAttachment(user.id, c.req.param("id"));
+    if (!meta) return err(c, 404, "NOT_FOUND");
+    const bytes = await blobs.get(`${user.id}/${meta.id}`);
+    if (!bytes) return err(c, 404, "NOT_FOUND");
+    return new Response(bytes as BodyInit, {
+      headers: { "Content-Type": "application/octet-stream", "Content-Length": String(bytes.length), "Cache-Control": "no-store" },
+    });
+  });
+
+  app.delete("/attachments/:id", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const meta = await store.getAttachment(user.id, c.req.param("id"));
+    if (!meta) return err(c, 404, "NOT_FOUND");
+    await blobs.delete(`${user.id}/${meta.id}`);
+    await store.deleteAttachment(user.id, meta.id);
+    await store.audit(user.id, "attachment_deleted", meta.id);
+    return c.json({ ok: true });
+  });
 
   return app;
 }

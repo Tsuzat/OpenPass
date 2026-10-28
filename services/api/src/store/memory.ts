@@ -1,4 +1,4 @@
-import type { DeviceRow, ItemRow, SessionRow, Store, UserRow } from "./types";
+import type { AttachmentRow, DeviceRow, ItemRow, SessionRow, Store, UserRow } from "./types";
 
 /** In-memory store for tests and local dev. Production uses D1Store with identical semantics. */
 export class MemoryStore implements Store {
@@ -6,6 +6,7 @@ export class MemoryStore implements Store {
   devices = new Map<string, DeviceRow>();
   sessions = new Map<string, SessionRow>();
   items = new Map<string, ItemRow>();
+  attachments = new Map<string, AttachmentRow>();
   audits: { userId: string | null; event: string; meta: string }[] = [];
 
   async getUserByEmail(email: string) { return [...this.users.values()].find((u) => u.email === email) ?? null; }
@@ -40,6 +41,9 @@ export class MemoryStore implements Store {
   async revokeOtherSessions(userId: string, keepSessionId: string | null) {
     for (const s of this.sessions.values()) if (s.userId === userId && s.id !== keepSessionId) s.revoked = 1;
   }
+  async createAttachment(a: AttachmentRow) { this.attachments.set(a.id, a); }
+  async getAttachment(userId: string, id: string) { const a = this.attachments.get(id); return a && a.userId === userId ? a : null; }
+  async deleteAttachment(userId: string, id: string) { const a = this.attachments.get(id); if (a && a.userId === userId) this.attachments.delete(id); }
   async getItem(vaultId: string, itemId: string) { return this.items.get(`${vaultId}:${itemId}`) ?? null; }
   async upsertItem(i: ItemRow) { this.items.set(`${i.vaultId}:${i.id}`, i); }
   async listItemsSince(vaultId: string, sinceIso: string | null) {

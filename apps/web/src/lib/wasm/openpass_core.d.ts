@@ -1,12 +1,30 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export function decryptBytesB64(key_b64: string, blob_b64: string, aad: string): string;
+
+export function decryptFileB64(file_key_b64: string, blob_b64: string): string;
+
 export function decryptItem(vault_key_b64: string, item_id: string, ciphertext_b64: string, wrapped_item_key_b64: string): string;
 
 /**
  * Argon2id(password) -> { authVerifierB64, kekB64 }. Runs synchronously; call from a Web Worker.
  */
 export function deriveAuthMaterial(password: string, params_json: string): string;
+
+export function deriveKeyWithParams(password: string, params_json: string): string;
+
+/**
+ * Derive a standalone key from a password (export backups). Returns { paramsJson, keyB64 }.
+ */
+export function deriveStandaloneKey(password: string): string;
+
+/**
+ * Arbitrary byte encryption (exports/backups). AAD binds the ciphertext to its purpose.
+ */
+export function encryptBytesB64(key_b64: string, plaintext_b64: string, aad: string): string;
+
+export function encryptFileB64(file_key_b64: string, plaintext_b64: string): string;
 
 export function encryptItem(vault_key_b64: string, item_id: string, plaintext_utf8: string): string;
 
@@ -34,8 +52,14 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly decryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly decryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly decryptItem: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
     readonly deriveAuthMaterial: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly deriveKeyWithParams: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+    readonly deriveStandaloneKey: (a: number, b: number) => [number, number, number, number];
+    readonly encryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+    readonly encryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly encryptItem: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly generateKdfParams: () => [number, number, number, number];
     readonly generatePassword: (a: number) => [number, number];

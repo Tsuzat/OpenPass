@@ -741,6 +741,14 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -758,9 +766,17 @@ internal interface UniffiLib : Library {
 
     fun uniffi_openpass_core_fn_func_ffi_auth_verifier(`masterKey`: RustBuffer.ByValue,`params`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_decrypt_bytes(`key`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,`aad`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_decrypt_file(`fileKey`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_decrypt_item(`vaultKey`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`item`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_derive_master_key(`password`: RustBuffer.ByValue,`params`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_encrypt_bytes(`key`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,`aad`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_encrypt_file(`fileKey`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_encrypt_item(`vaultKey`: RustBuffer.ByValue,`itemId`: RustBuffer.ByValue,`plaintext`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -900,9 +916,17 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_openpass_core_checksum_func_ffi_auth_verifier(
     ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_decrypt_bytes(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_decrypt_file(
+    ): Short
     fun uniffi_openpass_core_checksum_func_ffi_decrypt_item(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_derive_master_key(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_encrypt_bytes(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_encrypt_file(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_encrypt_item(
     ): Short
@@ -948,10 +972,22 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_openpass_core_checksum_func_ffi_auth_verifier() != 6262.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_decrypt_bytes() != 29943.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_decrypt_file() != 17666.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
     if (lib.uniffi_openpass_core_checksum_func_ffi_decrypt_item() != 59176.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_derive_master_key() != 11373.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_encrypt_bytes() != 39562.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_encrypt_file() != 51400.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_encrypt_item() != 58512.toShort()) {
@@ -1406,6 +1442,26 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     }
     
 
+    @Throws(FfiException::class) fun `ffiDecryptBytes`(`key`: kotlin.ByteArray, `blob`: kotlin.ByteArray, `aad`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_decrypt_bytes(
+        FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`blob`),FfiConverterByteArray.lower(`aad`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiDecryptFile`(`fileKey`: kotlin.ByteArray, `blob`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_decrypt_file(
+        FfiConverterByteArray.lower(`fileKey`),FfiConverterByteArray.lower(`blob`),_status)
+}
+    )
+    }
+    
+
     @Throws(FfiException::class) fun `ffiDecryptItem`(`vaultKey`: kotlin.ByteArray, `itemId`: kotlin.String, `item`: EncryptedItem): kotlin.ByteArray {
             return FfiConverterByteArray.lift(
     uniffiRustCallWithError(FfiException) { _status ->
@@ -1421,6 +1477,26 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_derive_master_key(
         FfiConverterString.lower(`password`),FfiConverterTypeKdfParams.lower(`params`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiEncryptBytes`(`key`: kotlin.ByteArray, `plaintext`: kotlin.ByteArray, `aad`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_encrypt_bytes(
+        FfiConverterByteArray.lower(`key`),FfiConverterByteArray.lower(`plaintext`),FfiConverterByteArray.lower(`aad`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiEncryptFile`(`fileKey`: kotlin.ByteArray, `plaintext`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_encrypt_file(
+        FfiConverterByteArray.lower(`fileKey`),FfiConverterByteArray.lower(`plaintext`),_status)
 }
     )
     }

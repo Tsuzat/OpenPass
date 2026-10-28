@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { checkHealth, getServerUrl, setServerUrl } from "./lib/api";
 import * as vault from "./lib/vault";
 
-type ItemKind = "login" | "card" | "secure_note" | "totp" | "identity";
+type ItemKind = "login" | "card" | "secure_note" | "totp" | "identity" | "file";
 const input = { display: "block", width: "100%", marginTop: 4 } as const;
 
 export default function App() {
@@ -16,6 +16,9 @@ export default function App() {
   const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
   const [reveal, setReveal] = useState(false);
   const [pwChange, setPwChange] = useState({ current: "", next: "" });
+  const [editForm, setEditForm] = useState<Record<string, string>>({});
+  const [transferPassword, setTransferPassword] = useState("");
+  const [transferMsg, setTransferMsg] = useState("");
   const [pwMsg, setPwMsg] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -45,6 +48,19 @@ export default function App() {
     events.forEach((e) => window.addEventListener(e, arm));
     return () => { events.forEach((e) => window.removeEventListener(e, arm)); if (lockTimer.current) clearTimeout(lockTimer.current); };
   }, [view, doLock]);
+
+  useEffect(() => {
+    if (!selected) { setEditForm({}); return; }
+    const p = selected.plaintext;
+    setEditForm({
+      name: selected.name, username: String(p.username ?? ""), password: String(p.password ?? ""),
+      uri: String(((p.uris as { uri: string }[] | undefined)?.[0]?.uri) ?? ""),
+      cardholder: String(p.cardholder ?? ""), number: String(p.number ?? ""), expMonth: String(p.expMonth ?? ""),
+      expYear: String(p.expYear ?? ""), cvv: String(p.cvv ?? ""), content: String(p.content ?? ""),
+      issuer: String(p.issuer ?? ""), account: String(p.account ?? ""), secretBase32: String(p.secretBase32 ?? ""),
+      firstName: String(p.firstName ?? ""), lastName: String(p.lastName ?? ""), phone: String(p.phone ?? ""),
+    });
+  }, [selected]);
 
   const refreshItems = useCallback(async () => {
     try { setItems(await vault.listItems()); setOffline(vault.isOffline()); }
@@ -156,14 +172,50 @@ export default function App() {
             {selected.type === "totp" && <p>Code: <code style={{ fontSize: 18 }}>{codes[selected.id] ?? "······"}</code></p>}
             {selected.type === "secure_note" && <pre style={{ whiteSpace: "pre-wrap" }}>{String(selected.plaintext.content ?? "")}</pre>}
             {selected.type === "card" && <p>•••• {String(selected.plaintext.number ?? "").slice(-4)} · {String(selected.plaintext.cardholder ?? "")}</p>}
-            <label>Rename
-              <input style={input} defaultValue={selected.name} id="op-rename" />
-            </label>
+            <label>Name<input style={input} value={editForm.name ?? ""} onChange={(e) => setEditForm({ ...editForm, name: e.target.value })} /></label>
+            {selected.type === "login" && <>
+              <label>Username<input style={input} value={editForm.username ?? ""} onChange={(e) => setEditForm({ ...editForm, username: e.target.value })} /></label>
+              <label>Password<input style={input} value={editForm.password ?? ""} onChange={(e) => setEditForm({ ...editForm, password: e.target.value })} /></label>
+              <label>URL<input style={input} value={editForm.uri ?? ""} onChange={(e) => setEditForm({ ...editForm, uri: e.target.value })} /></label>
+            </>}
+            {selected.type === "card" && <>
+              <label>Cardholder<input style={input} value={editForm.cardholder ?? ""} onChange={(e) => setEditForm({ ...editForm, cardholder: e.target.value })} /></label>
+              <label>Number<input style={input} value={editForm.number ?? ""} onChange={(e) => setEditForm({ ...editForm, number: e.target.value })} /></label>
+              <label>Expiry (MM / YYYY)<input style={input} value={editForm.expMonth ?? ""} onChange={(e) => setEditForm({ ...editForm, expMonth: e.target.value })} /></label>
+              <input style={input} value={editForm.expYear ?? ""} onChange={(e) => setEditForm({ ...editForm, expYear: e.target.value })} />
+              <label>CVV<input style={input} value={editForm.cvv ?? ""} onChange={(e) => setEditForm({ ...editForm, cvv: e.target.value })} /></label>
+            </>}
+            {selected.type === "secure_note" && <label>Content<textarea style={input} rows={5} value={editForm.content ?? ""} onChange={(e) => setEditForm({ ...editForm, content: e.target.value })} /></label>}
+            {selected.type === "totp" && <>
+              <label>Issuer<input style={input} value={editForm.issuer ?? ""} onChange={(e) => setEditForm({ ...editForm, issuer: e.target.value })} /></label>
+              <label>Account<input style={input} value={editForm.account ?? ""} onChange={(e) => setEditForm({ ...editForm, account: e.target.value })} /></label>
+              <label>Secret (Base32)<input style={input} value={editForm.secretBase32 ?? ""} onChange={(e) => setEditForm({ ...editForm, secretBase32: e.target.value })} /></label>
+            </>}
+            {selected.type === "identity" && <>
+              <label>First name<input style={input} value={editForm.firstName ?? ""} onChange={(e) => setEditForm({ ...editForm, firstName: e.target.value })} /></label>
+              <label>Last name<input style={input} value={editForm.lastName ?? ""} onChange={(e) => setEditForm({ ...editForm, lastName: e.target.value })} /></label>
+              <label>Phone<input style={input} value={editForm.phone ?? ""} onChange={(e) => setEditForm({ ...editForm, phone: e.target.value })} /></label>
+            </>}
+            {selected.type === "file" && (
+              <button onClick={async () => {
+                const f = await vault.downloadFile(selected);
+                const blob = new Blob([f.bytes as BlobPart], { type: f.mimeType });
+                const a = document.createElement("a");
+                a.href = URL.createObjectURL(blob); a.download = f.fileName; a.click();
+                URL.revokeObjectURL(a.href);
+              }}>Download decrypted file ({String(selected.plaintext.sizeBytes ?? "?")} bytes)</button>
+            )}
             <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
               <button onClick={async () => {
-                const v = (document.getElementById("op-rename") as HTMLInputElement).value;
-                await vault.updateItem(selected, { name: v }); setSelected(null); await refreshItems();
-              }}>Save rename</button>
+                const f = editForm;
+                const fields: Record<string, unknown> = { name: f.name };
+                if (selected.type === "login") Object.assign(fields, { username: f.username, password: f.password, uris: f.uri ? [{ uri: f.uri, match: "domain" }] : [] });
+                if (selected.type === "card") Object.assign(fields, { cardholder: f.cardholder, number: f.number, expMonth: f.expMonth, expYear: f.expYear, cvv: f.cvv });
+                if (selected.type === "secure_note") Object.assign(fields, { content: f.content });
+                if (selected.type === "totp") Object.assign(fields, { issuer: f.issuer, account: f.account, secretBase32: (f.secretBase32 ?? "").replace(/\s/g, "").toUpperCase() });
+                if (selected.type === "identity") Object.assign(fields, { firstName: f.firstName, lastName: f.lastName, phone: f.phone });
+                await vault.updateItem(selected, fields); setSelected(null); await refreshItems();
+              }}>Save changes</button>
               <button style={{ color: "#c00" }} onClick={async () => {
                 if (!confirm(`Delete "${selected.name}"? This syncs a tombstone to all devices.`)) return;
                 await vault.deleteItem(selected.id); setSelected(null); await refreshItems();
@@ -191,7 +243,7 @@ export default function App() {
           <select style={input} value={kind} onChange={(e) => setKind(e.target.value as ItemKind)}>
             <option value="login">Login</option><option value="card">Payment card</option>
             <option value="secure_note">Secure note</option><option value="totp">Authenticator (TOTP)</option>
-            <option value="identity">Identity / address</option>
+            <option value="identity">Identity / address</option><option value="file">File</option>
           </select>
         </label>
         <label>Name<input style={input} value={form.name} onChange={(e) => setForm({ ...form, name: e.target.value })} /></label>
@@ -229,9 +281,74 @@ export default function App() {
           <label>Email<input style={input} value={form.account} onChange={(e) => setForm({ ...form, account: e.target.value })} /></label>
           <label>Phone<input style={input} value={form.phone} onChange={(e) => setForm({ ...form, phone: e.target.value })} /></label>
         </>}
-        <button onClick={addItem} disabled={!form.name || !!busy} style={{ marginTop: 8 }}>Add encrypted item</button>
+        {kind === "file" ? (
+          <label style={{ display: "block", marginTop: 8 }}>Choose file (max ~10 MB in web vault)
+            <input type="file" style={input} onChange={async (e) => {
+              const file = e.target.files?.[0];
+              if (!file) return;
+              setBusy("Encrypting & uploading file…");
+              try { await vault.uploadFile(file.name, file.type, new Uint8Array(await file.arrayBuffer())); await refreshItems(); }
+              catch (err) { setError(String((err as Error).message)); } finally { setBusy(""); }
+            }} />
+          </label>
+        ) : (
+          <button onClick={addItem} disabled={!form.name || !!busy} style={{ marginTop: 8 }}>Add encrypted item</button>
+        )}
         {busy && <p>{busy}</p>}
         {error && <p style={{ color: "#c00" }}>{error}</p>}
+        <details style={{ marginTop: 16 }}>
+          <summary>Import / Export</summary>
+          <label>Export / import password (for encrypted OpenPass exports only)
+            <input style={input} type="password" value={transferPassword} onChange={(e) => setTransferPassword(e.target.value)} />
+          </label>
+          <div style={{ display: "flex", gap: 8, flexWrap: "wrap", marginTop: 8 }}>
+            <button disabled={offline || !transferPassword} onClick={async () => {
+              const text = await vault.exportEncrypted(transferPassword);
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+              a.download = "openpass-export.json"; a.click(); URL.revokeObjectURL(a.href);
+              setTransferMsg("Encrypted export downloaded.");
+            }}>Export encrypted</button>
+            <button onClick={async () => {
+              if (!confirm("Plaintext export exposes every password. Continue only to a trusted location.")) return;
+              const text = await vault.exportPlaintextJson();
+              const a = document.createElement("a");
+              a.href = URL.createObjectURL(new Blob([text], { type: "application/json" }));
+              a.download = "openpass-plaintext-export.json"; a.click(); URL.revokeObjectURL(a.href);
+              setTransferMsg("Plaintext export downloaded — delete it as soon as you are done.");
+            }}>Export plaintext (dangerous)</button>
+            <label style={{ border: "1px solid #999", padding: "4px 8px", cursor: "pointer" }}>
+              Import Bitwarden JSON / CSV / OpenPass export
+              <input type="file" accept=".json,.csv" style={{ display: "none" }} onChange={async (e) => {
+                const file = e.target.files?.[0];
+                if (!file) return;
+                setTransferMsg("Importing…");
+                try {
+                  const text = await file.text();
+                  let count: number;
+                  try {
+                    const head = JSON.parse(text) as { format?: string };
+                    if (head.format === "openpass-export") {
+                      if (!transferPassword) throw new Error("Enter the export password above first");
+                      count = await vault.importEncryptedExport(text, transferPassword);
+                    } else {
+                      const { parseImportFile } = await import("./lib/import");
+                      count = await vault.importItems(parseImportFile(file.name, text) as Record<string, unknown>[]);
+                    }
+                  } catch (parseErr) {
+                    const { parseImportFile } = await import("./lib/import");
+                    count = await vault.importItems(parseImportFile(file.name, text) as Record<string, unknown>[]);
+                    void parseErr;
+                  }
+                  setTransferMsg(`Imported ${count} item(s).`);
+                  await refreshItems();
+                } catch (err) { setTransferMsg(`Import failed: ${(err as Error).message}`); }
+              }} />
+            </label>
+          </div>
+          {transferMsg && <p>{transferMsg}</p>}
+        </details>
+
         <p style={{ color: "#888", fontSize: 12 }}>Auto-locks after 5 minutes of inactivity. Offline items queue locally and sync on next unlock.</p>
       </main>
     );

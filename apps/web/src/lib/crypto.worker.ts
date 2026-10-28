@@ -5,7 +5,7 @@
  */
 import init, {
   deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
-  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
+  encryptItem, decryptItem, encryptBytesB64, decryptBytesB64, encryptFileB64, decryptFileB64, deriveStandaloneKey, deriveKeyWithParams, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
   generateTotpSecretB32,
 } from "./wasm/openpass_core.js";
 
@@ -21,6 +21,12 @@ const ops: Record<string, (...args: never[]) => unknown> = {
   unwrapKey: (w: string, b: string) => unwrapKeyB64(w, b),
   encryptItem: (vk: string, id: string, pt: string) => encryptItem(vk, id, pt),
   decryptItem: (vk: string, id: string, ct: string, wk: string) => decryptItem(vk, id, ct, wk),
+  encryptBytesB64: (k: string, pt: string, aad: string) => encryptBytesB64(k, pt, aad),
+  decryptBytesB64: (k: string, b: string, aad: string) => decryptBytesB64(k, b, aad),
+  encryptFileB64: (k: string, pt: string) => encryptFileB64(k, pt),
+  decryptFileB64: (k: string, b: string) => decryptFileB64(k, b),
+  deriveStandaloneKey: (pw: string) => deriveStandaloneKey(pw),
+  deriveKeyWithParams: (pw: string, p: string) => deriveKeyWithParams(pw, p),
   generateRecoveryKey: () => generateRecoveryKey(),
   parseRecoveryKey: (t: string) => parseRecoveryKey(t),
   recoveryAuthProof: (k: string) => recoveryAuthProof(k),

@@ -102,6 +102,52 @@ pub fn recovery_auth_proof_js(recovery_key_b64: &str) -> Result<String, JsValue>
     Ok(b64(&crate::recovery_auth_proof(&key32(recovery_key_b64)?)))
 }
 
+/// Arbitrary byte encryption (exports/backups). AAD binds the ciphertext to its purpose.
+#[wasm_bindgen(js_name = encryptBytesB64)]
+pub fn encrypt_bytes_js(key_b64: &str, plaintext_b64: &str, aad: &str) -> Result<String, JsValue> {
+    let ct = crate::encrypt_bytes(&key32(key_b64)?, &unb64(plaintext_b64)?, aad.as_bytes())
+        .map_err(|_| JsValue::from_str("encrypt failed"))?;
+    Ok(b64(&ct))
+}
+
+#[wasm_bindgen(js_name = decryptBytesB64)]
+pub fn decrypt_bytes_js(key_b64: &str, blob_b64: &str, aad: &str) -> Result<String, JsValue> {
+    let pt = crate::decrypt_bytes(&key32(key_b64)?, &unb64(blob_b64)?, aad.as_bytes())
+        .map_err(|_| JsValue::from_str("decrypt failed"))?;
+    Ok(b64(&pt))
+}
+
+#[wasm_bindgen(js_name = encryptFileB64)]
+pub fn encrypt_file_js(file_key_b64: &str, plaintext_b64: &str) -> Result<String, JsValue> {
+    let ct = crate::encrypt_file(&key32(file_key_b64)?, &unb64(plaintext_b64)?)
+        .map_err(|_| JsValue::from_str("file encrypt failed"))?;
+    Ok(b64(&ct))
+}
+
+#[wasm_bindgen(js_name = decryptFileB64)]
+pub fn decrypt_file_js(file_key_b64: &str, blob_b64: &str) -> Result<String, JsValue> {
+    let pt = crate::decrypt_file(&key32(file_key_b64)?, &unb64(blob_b64)?)
+        .map_err(|_| JsValue::from_str("file decrypt failed"))?;
+    Ok(b64(&pt))
+}
+
+/// Derive a standalone key from a password (export backups). Returns { paramsJson, keyB64 }.
+#[wasm_bindgen(js_name = deriveStandaloneKey)]
+pub fn derive_standalone_key(password: &str) -> Result<String, JsValue> {
+    let params = KdfParams::new_random().map_err(|_| JsValue::from_str("rng failed"))?;
+    let key = derive_master_key(password, &params).map_err(|_| JsValue::from_str("kdf failed"))?;
+    #[derive(Serialize)]
+    #[serde(rename_all = "camelCase")]
+    struct Out { params: KdfParams, key_b64: String }
+    json(&Out { params, key_b64: b64(&key) })
+}
+
+#[wasm_bindgen(js_name = deriveKeyWithParams)]
+pub fn derive_key_with_params(password: &str, params_json: &str) -> Result<String, JsValue> {
+    let params = parse_params(params_json)?;
+    Ok(b64(&derive_master_key(password, &params).map_err(|_| JsValue::from_str("kdf failed"))?))
+}
+
 #[wasm_bindgen(js_name = generateTotpSecretB32)]
 pub fn generate_totp_secret_b32() -> String {
     crate::base32_encode(&generate_totp_secret())

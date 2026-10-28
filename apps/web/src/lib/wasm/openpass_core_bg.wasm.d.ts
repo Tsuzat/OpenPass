@@ -1,8 +1,14 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const decryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const decryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const decryptItem: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
 export const deriveAuthMaterial: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const deriveKeyWithParams: (a: number, b: number, c: number, d: number) => [number, number, number, number];
+export const deriveStandaloneKey: (a: number, b: number) => [number, number, number, number];
+export const encryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
+export const encryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const encryptItem: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const generateKdfParams: () => [number, number, number, number];
 export const generatePassword: (a: number) => [number, number];

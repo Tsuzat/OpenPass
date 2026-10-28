@@ -6,7 +6,7 @@
  */
 import init, {
   deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
-  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
+  encryptItem, decryptItem, encryptBytesB64, decryptBytesB64, encryptFileB64, decryptFileB64, deriveStandaloneKey, deriveKeyWithParams, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
   generateTotpSecretB32,
 } from "./wasm/openpass_core.js";
 import wasmUrl from "./wasm/openpass_core_bg.wasm?url";
@@ -79,6 +79,38 @@ export async function decryptItemJson<T>(vaultKeyB64: string, itemId: string, it
     vaultKeyB64, itemId, item.ciphertextB64, item.wrappedItemKeyB64);
   return JSON.parse(s as string) as T;
 }
+const bytesToB64 = (bytes: Uint8Array) => {
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < bytes.length; i += CHUNK) bin += String.fromCharCode(...bytes.subarray(i, i + CHUNK));
+  return btoa(bin);
+};
+const b64ToBytes = (b64: string) => Uint8Array.from(atob(b64), (ch) => ch.charCodeAt(0));
+export const encodeB64 = bytesToB64;
+export async function encryptTextWithKey(keyB64: string, plaintextUtf8: string, aad: string): Promise<string> {
+  const ptB64 = bytesToB64(new TextEncoder().encode(plaintextUtf8));
+  return call("encryptBytesB64", () => encryptBytesB64(keyB64, ptB64, aad), keyB64, ptB64, aad);
+}
+export async function decryptTextWithKey(keyB64: string, blobB64: string, aad: string): Promise<string> {
+  const ptB64 = await call("decryptBytesB64", () => decryptBytesB64(keyB64, blobB64, aad), keyB64, blobB64, aad);
+  return new TextDecoder().decode(b64ToBytes(ptB64 as string));
+}
+export async function encryptFileBytes(keyB64: string, bytes: Uint8Array): Promise<string> {
+  const ptB64 = bytesToB64(bytes);
+  return call("encryptFileB64", () => encryptFileB64(keyB64, ptB64), keyB64, ptB64);
+}
+export async function decryptFileBytes(keyB64: string, blobB64: string): Promise<Uint8Array> {
+  const ptB64 = await call("decryptFileB64", () => decryptFileB64(keyB64, blobB64), keyB64, blobB64);
+  return b64ToBytes(ptB64 as string);
+}
+export async function standaloneKey(password: string): Promise<{ params: KdfParams; keyB64: string }> {
+  const s = await call("deriveStandaloneKey", () => deriveStandaloneKey(password), password);
+  return JSON.parse(s as string) as { params: KdfParams; keyB64: string };
+}
+export async function keyWithParams(password: string, params: KdfParams): Promise<string> {
+  return call("deriveKeyWithParams", () => deriveKeyWithParams(password, JSON.stringify(params)), password, JSON.stringify(params));
+}
+
 export async function newRecoveryKey(): Promise<{ text: string; keyB64: string }> {
   const s = await call("generateRecoveryKey", () => generateRecoveryKey());
   return JSON.parse(s as string) as { text: string; keyB64: string };

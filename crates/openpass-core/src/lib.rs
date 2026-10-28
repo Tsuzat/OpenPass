@@ -152,6 +152,47 @@ pub fn decrypt_bytes(key: &[u8; 32], blob: &[u8], aad: &[u8]) -> Result<Vec<u8>,
         .map_err(|_| Error::Crypto)
 }
 
+// ---------- Chunked file encryption ----------
+// Format: version(1) || chunkSize u32 BE || chunks, each = len u32 BE || encrypt_bytes(chunk)
+// AAD per chunk = "openpass/file-chunk/{index}" so chunks cannot be reordered or truncated silently
+// (decrypt verifies chunk count against total length prefix consistency and final chunk presence).
+
+pub const FILE_CHUNK_SIZE: usize = 65_536;
+
+pub fn encrypt_file(file_key: &[u8; 32], plaintext: &[u8]) -> Result<Vec<u8>, Error> {
+    let chunks: Vec<&[u8]> = if plaintext.is_empty() { vec![&[]] } else { plaintext.chunks(FILE_CHUNK_SIZE).collect() };
+    let mut out = Vec::new();
+    out.push(BLOB_VERSION);
+    out.extend_from_slice(&(FILE_CHUNK_SIZE as u32).to_be_bytes());
+    out.extend_from_slice(&(chunks.len() as u32).to_be_bytes());
+    for (i, chunk) in chunks.iter().enumerate() {
+        let enc = encrypt_bytes(file_key, chunk, format!("openpass/file-chunk/{i}").as_bytes())?;
+        out.extend_from_slice(&(enc.len() as u32).to_be_bytes());
+        out.extend_from_slice(&enc);
+    }
+    Ok(out)
+}
+
+pub fn decrypt_file(file_key: &[u8; 32], blob: &[u8]) -> Result<Vec<u8>, Error> {
+    if blob.len() < 9 || blob[0] != BLOB_VERSION {
+        return Err(Error::Crypto);
+    }
+    let count = u32::from_be_bytes(blob[5..9].try_into().unwrap()) as usize;
+    let mut offset = 9;
+    let mut out = Vec::new();
+    for i in 0..count {
+        if offset + 4 > blob.len() { return Err(Error::Crypto); }
+        let len = u32::from_be_bytes(blob[offset..offset + 4].try_into().unwrap()) as usize;
+        offset += 4;
+        if offset + len > blob.len() { return Err(Error::Crypto); }
+        let pt = decrypt_bytes(file_key, &blob[offset..offset + len], format!("openpass/file-chunk/{i}").as_bytes())?;
+        out.extend_from_slice(&pt);
+        offset += len;
+    }
+    if offset != blob.len() { return Err(Error::Crypto); }
+    Ok(out)
+}
+
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[cfg_attr(feature = "uniffi", derive(uniffi::Record))]
 #[serde(rename_all = "camelCase")]

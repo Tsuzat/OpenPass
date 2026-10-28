@@ -139,6 +139,31 @@ describe("password change + recovery", () => {
   });
 });
 
+describe("attachments", () => {
+  test("upload/download/delete encrypted blob, owner-only", async () => {
+    const app = setup();
+    const reg = await req(app, "/auth/register", "POST", registerBody());
+    const token = reg.json.accessToken;
+    const payload = new Uint8Array([1, 2, 3, 4, 5]);
+
+    const upload = await app.request("/attachments", { method: "POST", headers: { Authorization: `Bearer ${token}` }, body: payload });
+    expect(upload.status).toBe(201);
+    const { id } = (await upload.json()) as any;
+
+    const download = await app.request(`/attachments/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(download.status).toBe(200);
+    expect(new Uint8Array(await download.arrayBuffer())).toEqual(payload);
+
+    const unauth = await app.request(`/attachments/${id}`);
+    expect(unauth.status).toBe(401);
+
+    const del = await req(app, `/attachments/${id}`, "DELETE", undefined, token);
+    expect(del.status).toBe(200);
+    const gone = await app.request(`/attachments/${id}`, { headers: { Authorization: `Bearer ${token}` } });
+    expect(gone.status).toBe(404);
+  });
+});
+
 describe("ciphertext sync", () => {
   test("push/pull, revision conflict, tombstone", async () => {
     const app = setup();

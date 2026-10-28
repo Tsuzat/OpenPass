@@ -103,6 +103,26 @@ pub fn ffi_recovery_auth_proof(recovery_key: Vec<u8>) -> Result<Vec<u8>, FfiErro
 }
 
 #[uniffi::export]
+pub fn ffi_encrypt_bytes(key: Vec<u8>, plaintext: Vec<u8>, aad: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::encrypt_bytes(&key32(&key)?, &plaintext, &aad).map_err(FfiError::from)
+}
+
+#[uniffi::export]
+pub fn ffi_decrypt_bytes(key: Vec<u8>, blob: Vec<u8>, aad: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::decrypt_bytes(&key32(&key)?, &blob, &aad).map_err(FfiError::from)
+}
+
+#[uniffi::export]
+pub fn ffi_encrypt_file(file_key: Vec<u8>, plaintext: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::encrypt_file(&key32(&file_key)?, &plaintext).map_err(FfiError::from)
+}
+
+#[uniffi::export]
+pub fn ffi_decrypt_file(file_key: Vec<u8>, blob: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    crate::decrypt_file(&key32(&file_key)?, &blob).map_err(FfiError::from)
+}
+
+#[uniffi::export]
 pub fn ffi_generate_totp_secret() -> Vec<u8> {
     generate_totp_secret()
 }

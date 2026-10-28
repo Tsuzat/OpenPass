@@ -1,4 +1,4 @@
-import type { DeviceRow, ItemRow, SessionRow, Store, UserRow } from "./types";
+import type { AttachmentRow, DeviceRow, ItemRow, SessionRow, Store, UserRow } from "./types";
 
 // Minimal D1Database structural type (avoids hard dependency in shared code paths)
 interface D1Prepared { bind(...v: unknown[]): D1Prepared; first<T>(): Promise<T | null>; all<T>(): Promise<{ results: T[] }>; run(): Promise<unknown>; }
@@ -39,6 +39,9 @@ export class D1Store implements Store {
   async revokeSession(id: string) { await this.db.prepare(`UPDATE sessions SET revoked=1 WHERE id=?`).bind(id).run(); }
   async revokeDeviceSessions(userId: string, deviceId: string) { await this.db.prepare(`UPDATE sessions SET revoked=1 WHERE user_id=? AND device_id=?`).bind(userId, deviceId).run(); }
   async revokeOtherSessions(userId: string, keepSessionId: string | null) { await this.db.prepare(`UPDATE sessions SET revoked=1 WHERE user_id=? AND id<>?`).bind(userId, keepSessionId ?? "").run(); }
+  async createAttachment(a: AttachmentRow) { await this.db.prepare(`INSERT INTO attachments (id,user_id,vault_id,size_bytes,created_at) VALUES (?,?,?,?,?)`).bind(a.id, a.userId, a.vaultId, a.sizeBytes, a.createdAt).run(); }
+  async getAttachment(userId: string, id: string) { const r = await this.db.prepare(`SELECT * FROM attachments WHERE user_id=? AND id=?`).bind(userId, id).first<Record<string, unknown>>(); return r ? { id: r.id as string, userId: r.user_id as string, vaultId: r.vault_id as string, sizeBytes: r.size_bytes as number, createdAt: r.created_at as string } : null; }
+  async deleteAttachment(userId: string, id: string) { await this.db.prepare(`DELETE FROM attachments WHERE user_id=? AND id=?`).bind(userId, id).run(); }
   async getItem(vaultId: string, itemId: string) { const r = await this.db.prepare(`SELECT * FROM items WHERE vault_id=? AND id=?`).bind(vaultId, itemId).first<Record<string, unknown>>(); return r ? mapItem(r) : null; }
   async upsertItem(i: ItemRow) { await this.db.prepare(`INSERT INTO items (id,vault_id,user_id,type,ciphertext_b64,wrapped_item_key_b64,revision,deleted,updated_at) VALUES (?,?,?,?,?,?,?,?,?) ON CONFLICT(id) DO UPDATE SET type=excluded.type,ciphertext_b64=excluded.ciphertext_b64,wrapped_item_key_b64=excluded.wrapped_item_key_b64,revision=excluded.revision,deleted=excluded.deleted,updated_at=excluded.updated_at`).bind(i.id, i.vaultId, i.userId, i.type, i.ciphertextB64, i.wrappedItemKeyB64, i.revision, i.deleted, i.updatedAt).run(); }
   async listItemsSince(vaultId: string, sinceIso: string | null) { const { results } = sinceIso ? await this.db.prepare(`SELECT * FROM items WHERE vault_id=? AND updated_at>? ORDER BY updated_at ASC`).bind(vaultId, sinceIso).all<Record<string, unknown>>() : await this.db.prepare(`SELECT * FROM items WHERE vault_id=? ORDER BY updated_at ASC`).bind(vaultId).all<Record<string, unknown>>(); return results.map(mapItem); }

@@ -60,6 +60,27 @@ fn recovery_key_roundtrip() {
 }
 
 #[test]
+fn file_chunking_roundtrip_and_reorder_detection() {
+    let key = random_key();
+    for size in [0usize, 1, 65_536, 65_537, 200_000] {
+        let data: Vec<u8> = (0..size).map(|i| (i % 251) as u8).collect();
+        let enc = encrypt_file(&key, &data).unwrap();
+        assert_eq!(decrypt_file(&key, &enc).unwrap(), data, "size {size}");
+    }
+    // reorder: swap bytes deep inside chunk payloads must fail AEAD
+    let data = vec![7u8; 150_000];
+    let mut enc = encrypt_file(&key, &data).unwrap();
+    let mid = enc.len() / 2;
+    enc[mid] ^= 0xFF;
+    assert!(decrypt_file(&key, &enc).is_err());
+    // truncation must fail
+    let enc2 = encrypt_file(&key, &data).unwrap();
+    assert!(decrypt_file(&key, &enc2[..enc2.len() - 10]).is_err());
+    // wrong key must fail
+    assert!(decrypt_file(&random_key(), &enc2).is_err());
+}
+
+#[test]
 fn totp_base32_and_verify() {
     let secret = generate_totp_secret();
     let encoded = base32_encode(&secret);

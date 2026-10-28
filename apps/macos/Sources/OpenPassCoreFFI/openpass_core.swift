@@ -853,6 +853,23 @@ public func ffiAuthVerifier(masterKey: Data, params: KdfParams)throws  -> Data {
     )
 })
 }
+public func ffiDecryptBytes(key: Data, blob: Data, aad: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_decrypt_bytes(
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(blob),
+        FfiConverterData.lower(aad),$0
+    )
+})
+}
+public func ffiDecryptFile(fileKey: Data, blob: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_decrypt_file(
+        FfiConverterData.lower(fileKey),
+        FfiConverterData.lower(blob),$0
+    )
+})
+}
 public func ffiDecryptItem(vaultKey: Data, itemId: String, item: EncryptedItem)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
     uniffi_openpass_core_fn_func_ffi_decrypt_item(
@@ -867,6 +884,23 @@ public func ffiDeriveMasterKey(password: String, params: KdfParams)throws  -> Da
     uniffi_openpass_core_fn_func_ffi_derive_master_key(
         FfiConverterString.lower(password),
         FfiConverterTypeKdfParams.lower(params),$0
+    )
+})
+}
+public func ffiEncryptBytes(key: Data, plaintext: Data, aad: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_encrypt_bytes(
+        FfiConverterData.lower(key),
+        FfiConverterData.lower(plaintext),
+        FfiConverterData.lower(aad),$0
+    )
+})
+}
+public func ffiEncryptFile(fileKey: Data, plaintext: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_encrypt_file(
+        FfiConverterData.lower(fileKey),
+        FfiConverterData.lower(plaintext),$0
     )
 })
 }
@@ -978,10 +1012,22 @@ private var initializationResult: InitializationResult = {
     if (uniffi_openpass_core_checksum_func_ffi_auth_verifier() != 6262) {
         return InitializationResult.apiChecksumMismatch
     }
+    if (uniffi_openpass_core_checksum_func_ffi_decrypt_bytes() != 29943) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_decrypt_file() != 17666) {
+        return InitializationResult.apiChecksumMismatch
+    }
     if (uniffi_openpass_core_checksum_func_ffi_decrypt_item() != 59176) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_derive_master_key() != 11373) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_encrypt_bytes() != 39562) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_encrypt_file() != 51400) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_encrypt_item() != 58512) {

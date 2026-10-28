@@ -219,6 +219,77 @@ export async function deleteItem(id: string): Promise<void> {
 export const createLoginItem = (name: string, username: string, password: string, uri: string) =>
   createItem("login", { name, username, password, uris: uri ? [{ uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
 
+// ---------- Files (Phase 3: chunked-AEAD blobs in R2) ----------
+
+export async function uploadFile(fileName: string, mimeType: string, bytes: Uint8Array): Promise<void> {
+  if (!vaultKeyB64 || !accessToken) throw new Error("LOCKED");
+  const fileKey = await crypto.randomKey();
+  const ciphertextB64 = await crypto.encryptFileBytes(fileKey, bytes);
+  const upload = await fetch(`${getServerUrl()}/attachments`, {
+    method: "POST",
+    headers: { Authorization: `Bearer ${accessToken}`, "Content-Type": "application/octet-stream" },
+    body: Uint8Array.from(atob(ciphertextB64), (ch) => ch.charCodeAt(0)) as BodyInit,
+  });
+  if (!upload.ok) throw new Error(`UPLOAD_FAILED_${upload.status}`);
+  const { id: attachmentId } = (await upload.json()) as { id: string };
+  await createItem("file", {
+    name: fileName, fileName, mimeType: mimeType || "application/octet-stream",
+    sizeBytes: bytes.length, attachmentId,
+    wrappedFileKeyB64: await crypto.wrapKey(vaultKeyB64, fileKey),
+  });
+}
+
+export async function downloadFile(item: VaultItemSummary): Promise<{ fileName: string; mimeType: string; bytes: Uint8Array }> {
+  if (!vaultKeyB64 || !accessToken) throw new Error("LOCKED");
+  const attachmentId = String(item.plaintext.attachmentId ?? "");
+  const res = await fetch(`${getServerUrl()}/attachments/${attachmentId}`, {
+    headers: { Authorization: `Bearer ${accessToken}` },
+  });
+  if (!res.ok) throw new Error(`DOWNLOAD_FAILED_${res.status}`);
+  const cipherBytes = new Uint8Array(await res.arrayBuffer());
+  let bin = "";
+  const CHUNK = 0x8000;
+  for (let i = 0; i < cipherBytes.length; i += CHUNK) bin += String.fromCharCode(...cipherBytes.subarray(i, i + CHUNK));
+  const fileKey = await crypto.unwrapKey(vaultKeyB64, String(item.plaintext.wrappedFileKeyB64 ?? ""));
+  const bytes = await crypto.decryptFileBytes(fileKey, btoa(bin));
+  return { fileName: String(item.plaintext.fileName ?? item.name), mimeType: String(item.plaintext.mimeType ?? "application/octet-stream"), bytes };
+}
+
+// ---------- Encrypted export / import ----------
+
+const EXPORT_AAD = "openpass/export/v1";
+
+export async function exportEncrypted(exportPassword: string): Promise<string> {
+  const items = await listItems();
+  const plaintexts = items.map((i) => i.plaintext);
+  const { params, keyB64 } = await crypto.standaloneKey(exportPassword);
+  const ciphertextB64 = await crypto.encryptTextWithKey(keyB64, JSON.stringify(plaintexts), EXPORT_AAD);
+  return JSON.stringify({ format: "openpass-export", version: 1, kdfParams: params, ciphertextB64 }, null, 2);
+}
+
+export async function importItems(items: Record<string, unknown>[]): Promise<number> {
+  let count = 0;
+  for (const item of items) {
+    const { type, ...fields } = item as { type: string };
+    await createItem(String(type), fields);
+    count++;
+  }
+  return count;
+}
+
+export async function importEncryptedExport(text: string, exportPassword: string): Promise<number> {
+  const data = JSON.parse(text) as { format?: string; kdfParams: crypto.KdfParams; ciphertextB64: string };
+  if (data.format !== "openpass-export") throw new Error("Not an OpenPass encrypted export");
+  const keyB64 = await crypto.keyWithParams(exportPassword, data.kdfParams);
+  const json = await crypto.decryptTextWithKey(keyB64, data.ciphertextB64, EXPORT_AAD);
+  return importItems(JSON.parse(json) as Record<string, unknown>[]);
+}
+
+export async function exportPlaintextJson(): Promise<string> {
+  const items = await listItems();
+  return JSON.stringify({ format: "openpass-plaintext-export", version: 1, items: items.map((i) => i.plaintext) }, null, 2);
+}
+
 export const currentTotp = (secretB32: string) => crypto.totp(secretB32);
 export const makePassword = (length = 20) => crypto.makePassword(length);
 export const newTotpSecret = () => crypto.newTotpSecret();
