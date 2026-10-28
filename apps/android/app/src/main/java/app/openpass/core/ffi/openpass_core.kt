@@ -755,6 +755,10 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -771,6 +775,10 @@ internal interface UniffiLib : Library {
     }
 
     fun uniffi_openpass_core_fn_func_ffi_auth_verifier(`masterKey`: RustBuffer.ByValue,`params`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_base32_decode(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_base32_encode(`data`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_decrypt_bytes(`key`: RustBuffer.ByValue,`blob`: RustBuffer.ByValue,`aad`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -928,6 +936,10 @@ internal interface UniffiLib : Library {
     ): Unit
     fun uniffi_openpass_core_checksum_func_ffi_auth_verifier(
     ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_base32_decode(
+    ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_base32_encode(
+    ): Short
     fun uniffi_openpass_core_checksum_func_ffi_decrypt_bytes(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_decrypt_file(
@@ -988,6 +1000,12 @@ private fun uniffiCheckContractApiVersion(lib: UniffiLib) {
 @Suppress("UNUSED_PARAMETER")
 private fun uniffiCheckApiChecksums(lib: UniffiLib) {
     if (lib.uniffi_openpass_core_checksum_func_ffi_auth_verifier() != 6262.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_base32_decode() != 3003.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_base32_encode() != 65289.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_decrypt_bytes() != 29943.toShort()) {
@@ -1496,6 +1514,25 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     uniffiRustCallWithError(FfiException) { _status ->
     UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_auth_verifier(
         FfiConverterByteArray.lower(`masterKey`),FfiConverterTypeKdfParams.lower(`params`),_status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiBase32Decode`(`text`: kotlin.String): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_base32_decode(
+        FfiConverterString.lower(`text`),_status)
+}
+    )
+    }
+    
+ fun `ffiBase32Encode`(`data`: kotlin.ByteArray): kotlin.String {
+            return FfiConverterString.lift(
+    uniffiRustCall() { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_base32_encode(
+        FfiConverterByteArray.lower(`data`),_status)
 }
     )
     }

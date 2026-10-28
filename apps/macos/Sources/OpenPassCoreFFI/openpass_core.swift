@@ -919,6 +919,20 @@ public func ffiAuthVerifier(masterKey: Data, params: KdfParams)throws  -> Data {
     )
 })
 }
+public func ffiBase32Decode(text: String)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_base32_decode(
+        FfiConverterString.lower(text),$0
+    )
+})
+}
+public func ffiBase32Encode(data: Data) -> String {
+    return try!  FfiConverterString.lift(try! rustCall() {
+    uniffi_openpass_core_fn_func_ffi_base32_encode(
+        FfiConverterData.lower(data),$0
+    )
+})
+}
 public func ffiDecryptBytes(key: Data, blob: Data, aad: Data)throws  -> Data {
     return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
     uniffi_openpass_core_fn_func_ffi_decrypt_bytes(
@@ -1097,6 +1111,12 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.contractVersionMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_auth_verifier() != 6262) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_base32_decode() != 3003) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_base32_encode() != 65289) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_decrypt_bytes() != 29943) {

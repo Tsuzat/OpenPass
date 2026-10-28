@@ -256,6 +256,16 @@ typedef void (*UniffiForeignFutureCompleteVoid)(uint64_t, UniffiForeignFutureStr
 RustBuffer uniffi_openpass_core_fn_func_ffi_auth_verifier(RustBuffer master_key, RustBuffer params, RustCallStatus *_Nonnull out_status
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_BASE32_DECODE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_BASE32_DECODE
+RustBuffer uniffi_openpass_core_fn_func_ffi_base32_decode(RustBuffer text, RustCallStatus *_Nonnull out_status
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_BASE32_ENCODE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_BASE32_ENCODE
+RustBuffer uniffi_openpass_core_fn_func_ffi_base32_encode(RustBuffer data, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_BYTES
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_DECRYPT_BYTES
 RustBuffer uniffi_openpass_core_fn_func_ffi_decrypt_bytes(RustBuffer key, RustBuffer blob, RustBuffer aad, RustCallStatus *_Nonnull out_status
@@ -649,6 +659,18 @@ void ffi_openpass_core_rust_future_complete_void(uint64_t handle, RustCallStatus
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_AUTH_VERIFIER
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_AUTH_VERIFIER
 uint16_t uniffi_openpass_core_checksum_func_ffi_auth_verifier(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_BASE32_DECODE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_BASE32_DECODE
+uint16_t uniffi_openpass_core_checksum_func_ffi_base32_decode(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_BASE32_ENCODE
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_BASE32_ENCODE
+uint16_t uniffi_openpass_core_checksum_func_ffi_base32_encode(void
     
 );
 #endif

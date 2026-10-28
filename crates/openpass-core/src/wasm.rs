@@ -168,6 +168,11 @@ pub fn passkey_sign_js(private_key_pkcs8_b64: &str, data_b64: &str) -> Result<St
     Ok(b64(&sig))
 }
 
+#[wasm_bindgen(js_name = base32Decode)]
+pub fn base32_decode_js(text: &str) -> Result<String, JsValue> {
+    Ok(b64(&crate::base32_decode(text).map_err(|_| JsValue::from_str("invalid base32"))?))
+}
+
 #[wasm_bindgen(js_name = generateTotpSecretB32)]
 pub fn generate_totp_secret_b32() -> String {
     crate::base32_encode(&generate_totp_secret())

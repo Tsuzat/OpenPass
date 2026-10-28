@@ -1,6 +1,7 @@
 /* tslint:disable */
 /* eslint-disable */
 export const memory: WebAssembly.Memory;
+export const base32Decode: (a: number, b: number) => [number, number, number, number];
 export const decryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
 export const decryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const decryptItem: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];

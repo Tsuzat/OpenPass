@@ -18,7 +18,38 @@ struct APIClient {
         let recoveryWrappedVaultKeyB64: String
         let vaultId: String
     }
-    enum APIError: Error { case http(Int, String), decoding }
+    enum APIError: Error {
+        case http(Int, String)
+        case decoding
+        /// Structured error code from the API body: {"error":{"code":"..."}}
+        case server(code: String, status: Int)
+
+        var userMessage: String {
+            switch self {
+            case .server(let code, _):
+                switch code {
+                case "DEVICE_APPROVAL_REQUIRED":
+                    return "This Mac is a new device. Approve it from a device you're already signed in on (Web Vault → Devices), then try again."
+                case "INVALID_CREDENTIALS": return "Invalid email or master password."
+                case "EMAIL_TAKEN": return "An account with this email already exists. Use Log in instead."
+                case "REGISTRATION_CLOSED": return "Registration is closed on this server."
+                case "RATE_LIMITED": return "Too many attempts. Wait a minute and try again."
+                case "UNAUTHORIZED": return "Session expired. Please sign in again."
+                default: return "Server error: \(code)"
+                }
+            case .http(let status, _): return "Server returned HTTP \(status). Check the server URL."
+            case .decoding: return "Unexpected response from the server. Check the server URL is your OpenPass API."
+            }
+        }
+    }
+
+    private struct ErrorBody: Decodable { struct Inner: Decodable { let code: String }; let error: Inner }
+
+    func health() async -> Bool {
+        guard let url = URL(string: baseURL.absoluteString.trimmingCharacters(in: CharacterSet(charactersIn: "/")) + "/health") else { return false }
+        guard let (_, response) = try? await URLSession.shared.data(from: url) else { return false }
+        return (response as? HTTPURLResponse)?.statusCode == 200
+    }
 
     private func post<T: Decodable>(_ path: String, _ body: [String: Any], token: String? = nil) async throws -> T {
         var req = URLRequest(url: baseURL.appendingPathComponent(path))
@@ -28,7 +59,12 @@ struct APIClient {
         req.httpBody = try JSONSerialization.data(withJSONObject: body)
         let (data, response) = try await URLSession.shared.data(for: req)
         let status = (response as? HTTPURLResponse)?.statusCode ?? 0
-        guard status < 400 else { throw APIError.http(status, String(data: data, encoding: .utf8) ?? "") }
+        guard status < 400 else {
+            if let body = try? JSONDecoder().decode(ErrorBody.self, from: data) {
+                throw APIError.server(code: body.error.code, status: status)
+            }
+            throw APIError.http(status, String(data: data, encoding: .utf8) ?? "")
+        }
         do { return try JSONDecoder().decode(T.self, from: data) } catch { throw APIError.decoding }
     }
 

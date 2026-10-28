@@ -6,17 +6,31 @@ import VaultKit
 
 /// Vault state machine: locked (cold) -> biometric-armed -> unlocked.
 /// All cryptography delegates to the Rust core (crates/openpass-core via UniFFI) —
-/// Swift never implements primitives directly. Bindings: scripts/generate-bindings.sh (Phase 2).
+/// Swift never implements primitives directly.
 @MainActor
 final class VaultStore: ObservableObject {
     @Published var isUnlocked = false
-    @Published var serverURL = "https://your-worker.example.com"
-    @Published var email = ""
+    @Published var serverURL: String {
+        didSet { UserDefaults.standard.set(serverURL, forKey: "openpass.serverURL") }
+    }
+    @Published var email: String {
+        didSet { UserDefaults.standard.set(email, forKey: "openpass.email") }
+    }
     /// Set once after registration — the UI must show it to the user a single time.
     @Published var recoveryKeyToShow: String?
+    @Published var items: [ItemSummary] = []
+    /// nil = not checked, true/false = last /health result for the server field.
+    @Published var serverReachable: Bool?
+
     private var autoLockTask: Task<Void, Never>?
     private(set) var accessToken: String?
     private var vaultKey: Data?
+    private var ciphertextById: [String: APIClient.CipherItemDTO] = [:]
+
+    init() {
+        serverURL = UserDefaults.standard.string(forKey: "openpass.serverURL") ?? "https://your-worker.example.com"
+        email = UserDefaults.standard.string(forKey: "openpass.email") ?? ""
+    }
 
     var deviceId: String {
         if let id = UserDefaults.standard.string(forKey: "openpass.deviceId") { return id }
@@ -25,30 +39,42 @@ final class VaultStore: ObservableObject {
         return id
     }
 
-    /// Biometric availability for arming device-local wrapped VaultKey (Secure Enclave).
+    /// Normalize user input: trim, drop trailing slashes, default to https.
+    var normalizedServerURL: URL? {
+        var s = serverURL.trimmingCharacters(in: .whitespacesAndNewlines)
+        while s.hasSuffix("/") { s.removeLast() }
+        if !s.contains("://") { s = "https://" + s }
+        return URL(string: s)
+    }
+
     var biometricsAvailable: Bool {
         var error: NSError?
         return LAContext().canEvaluatePolicy(.deviceOwnerAuthenticationWithBiometrics, error: &error)
     }
 
-    func unlockWithBiometrics() async throws {
-        let context = LAContext()
-        try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
-                                         localizedReason: "Unlock your OpenPass vault")
-        #if canImport(VaultKit)
-        // Load the biometry-gated wrapped vault key blob (Keychain access control
-        // drives its own Touch ID prompt), then unwrap via the Rust core:
-        //   let blob = try KeychainBiometricKeyStore().loadWrappedVaultKey()
-        //   vaultKey = try OpenPassCrypto.unwrapKey(wrapper: deviceKey, blob: blob)
-        _ = try KeychainBiometricKeyStore().loadWrappedVaultKey()
-        #endif
-        isUnlocked = true
-        scheduleAutoLock(minutes: 5)
+    func friendlyMessage(for error: Error) -> String {
+        if let api = error as? APIClient.APIError { return api.userMessage }
+        if let urlError = error as? URLError {
+            switch urlError.code {
+            case .cannotFindHost, .dnsLookupFailed: return "Cannot find that server. Check the server URL."
+            case .cannotConnectToHost: return "Cannot connect to the server. Is the URL right, and is the API deployed?"
+            case .secureConnectionFailed, .serverCertificateUntrusted: return "TLS connection failed. Check the server URL (https)."
+            case .timedOut: return "Connection timed out."
+            default: return "Network error: \(urlError.localizedDescription)"
+            }
+        }
+        return "\(error)"
     }
 
-    /// Create a new account + vault on this device (bootstrap device is auto-approved).
+    func checkServer() async {
+        guard let base = normalizedServerURL else { serverReachable = false; return }
+        serverReachable = await APIClient(baseURL: base).health()
+    }
+
+    // MARK: - Auth
+
     func register(email: String, password: String) async throws {
-        guard let base = URL(string: serverURL) else { throw APIClient.APIError.decoding }
+        guard let base = normalizedServerURL else { throw APIClient.APIError.decoding }
         let client = APIClient(baseURL: base)
         let kdf = try OpenPassCrypto.newKdfParams()
         let params = APIClient.Prelogin.Params(memoryKib: kdf.memoryKib, iterations: kdf.iterations, parallelism: kdf.parallelism)
@@ -70,10 +96,11 @@ final class VaultStore: ObservableObject {
         self.email = email
         isUnlocked = true
         scheduleAutoLock(minutes: 5)
+        await refreshItems()
     }
 
     func unlockWithMasterPassword(_ password: String) async throws {
-        guard let base = URL(string: serverURL) else { throw APIClient.APIError.decoding }
+        guard let base = normalizedServerURL else { throw APIClient.APIError.decoding }
         let client = APIClient(baseURL: base)
         let pre = try await client.prelogin(email: email)
         let params = KdfParams(memoryKib: pre.kdfParams.memoryKib, iterations: pre.kdfParams.iterations,
@@ -84,69 +111,29 @@ final class VaultStore: ObservableObject {
         guard let wrapped = Data(base64Encoded: resp.wrappedVaultKeyB64) else { throw APIClient.APIError.decoding }
         vaultKey = try OpenPassCrypto.unwrapKey(wrapper: auth.kek, blob: wrapped)
         accessToken = resp.accessToken
-        // NOTE: VaultKit SyncEngine pull + Secure Enclave re-wrap of vaultKey for
-        // Touch ID are wired in the Xcode target (App Group container choice pending).
         isUnlocked = true
         scheduleAutoLock(minutes: 5)
+        await refreshItems()
     }
 
-    /// In-memory vault key for item decryption via OpenPassCrypto. Never persisted unwrapped.
-    func withVaultKey<T>(_ body: (Data) throws -> T) throws -> T {
-        guard let vaultKey else { throw APIClient.APIError.decoding }
-        return try body(vaultKey)
-    }
-
-    struct ItemSummary: Identifiable, Equatable {
-        let id: String; let name: String; let type: String; let username: String
-    }
-    @Published var items: [ItemSummary] = []
-    private var ciphertextById: [String: APIClient.CipherItemDTO] = [:]
-
-    /// Fetch ciphertext items and decrypt summaries (name/type/username) in memory.
-    /// Full plaintext is decrypted on demand when an item is opened, never stored.
-    func refreshItems() async {
-        guard let accessToken, let vaultKey, let base = URL(string: serverURL) else { return }
-        do {
-            let resp = try await APIClient(baseURL: base).items(token: accessToken)
-            ciphertextById = Dictionary(uniqueKeysWithValues: resp.items.map { ($0.id, $0) })
-            items = resp.items.filter { !$0.deleted }.compactMap { dto in
-                guard let ct = Data(base64Encoded: dto.ciphertextB64),
-                      let wrapped = Data(base64Encoded: dto.wrappedItemKeyB64) else { return nil }
-                let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
-                _ = ct; _ = wrapped
-                guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: dto.id, item: enc),
-                      let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
-                if obj["system"] != nil { return nil }
-                return ItemSummary(id: dto.id, name: obj["name"] as? String ?? "(unnamed)",
-                                   type: dto.type, username: obj["username"] as? String ?? "")
-            }.sorted { $0.name < $1.name }
-        } catch {
-            // Offline: VaultKit cache takes over in the Xcode wiring; keep current list.
-        }
+    func unlockWithBiometrics() async throws {
+        let context = LAContext()
+        try await context.evaluatePolicy(.deviceOwnerAuthenticationWithBiometrics,
+                                         localizedReason: "Unlock your OpenPass vault")
+        // Biometric unlock is armed only after the Secure Enclave device-key wrap
+        // lands; until then fail honestly instead of opening a keyless session.
+        throw NSError(domain: "OpenPass", code: 11, userInfo: [
+            NSLocalizedDescriptionKey: "Touch ID unlock is not set up yet. Use your master password.",
+        ])
     }
 
     func lock() {
         isUnlocked = false
         accessToken = nil
-        vaultKey = nil // Data release; Rust-side keys are zeroized by the core on drop
+        vaultKey = nil
+        items = []
+        ciphertextById = [:]
         autoLockTask?.cancel()
-    }
-
-    /// Decrypt one item's full plaintext on open. Result is a flat string map for
-    /// display; it lives in view state only and is dropped on selection change/lock.
-    func decryptDetails(id: String) -> [String: String]? {
-        guard let dto = ciphertextById[id], let vaultKey else { return nil }
-        let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
-        guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: id, item: enc),
-              let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
-        var out: [String: String] = [:]
-        for (k, v) in obj {
-            if let s = v as? String { out[k] = s }
-            else if let n = v as? NSNumber { out[k] = n.stringValue }
-            else if let arr = v as? [[String: Any]], k == "uris" { out[k] = arr.compactMap { $0["uri"] as? String }.joined(separator: ", ") }
-            else if let tags = v as? [String] { out[k] = tags.map { "#\($0)" }.joined(separator: " ") }
-        }
-        return out
     }
 
     private func scheduleAutoLock(minutes: Int) {
@@ -155,5 +142,63 @@ final class VaultStore: ObservableObject {
             try? await Task.sleep(for: .seconds(minutes * 60))
             self?.lock()
         }
+    }
+
+    // MARK: - Items
+
+    struct ItemSummary: Identifiable, Equatable {
+        let id: String; let name: String; let type: String; let username: String
+    }
+
+    func refreshItems() async {
+        guard let accessToken, let vaultKey, let base = normalizedServerURL else { return }
+        do {
+            let resp = try await APIClient(baseURL: base).items(token: accessToken)
+            ciphertextById = Dictionary(uniqueKeysWithValues: resp.items.map { ($0.id, $0) })
+            items = resp.items.filter { !$0.deleted }.compactMap { dto in
+                let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
+                guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: dto.id, item: enc),
+                      let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
+                if obj["system"] != nil { return nil }
+                let subtitle = (obj["username"] as? String) ?? (obj["issuer"] as? String) ?? (obj["rpId"] as? String) ?? ""
+                return ItemSummary(id: dto.id, name: obj["name"] as? String ?? "(unnamed)", type: dto.type, username: subtitle)
+            }.sorted { $0.name < $1.name }
+        } catch {
+            // Keep current list on transient failures.
+        }
+    }
+
+    /// Full decrypted plaintext for one item (view state only, never persisted).
+    func decryptItem(id: String) -> [String: Any]? {
+        guard let dto = ciphertextById[id], let vaultKey else { return nil }
+        let enc = EncryptedItem(ciphertextB64: dto.ciphertextB64, wrappedItemKeyB64: dto.wrappedItemKeyB64)
+        guard let plain = try? OpenPassCrypto.decryptItem(vaultKey: vaultKey, itemId: id, item: enc),
+              let obj = try? JSONSerialization.jsonObject(with: plain) as? [String: Any] else { return nil }
+        return obj
+    }
+
+    /// Current TOTP code for a totp item, plus seconds remaining in the window.
+    func totp(forItemId id: String) -> (code: String, remaining: Int)? {
+        guard let obj = decryptItem(id: id), let secret = obj["secretBase32"] as? String else { return nil }
+        let digits = (obj["digits"] as? NSNumber)?.uint32Value ?? 6
+        let sha256 = (obj["algorithm"] as? String) == "SHA256"
+        guard let code = try? OpenPassCrypto.totpCode(secretBase32: secret, digits: digits, sha256: sha256) else { return nil }
+        let remaining = 30 - Int(Date().timeIntervalSince1970) % 30
+        return (code, remaining)
+    }
+
+    /// Download + decrypt a file item; returns decrypted bytes for the caller to save.
+    func downloadFile(id: String) async throws -> (name: String, data: Data)? {
+        guard let obj = decryptItem(id: id), let vaultKey,
+              let attachmentId = obj["attachmentId"] as? String,
+              let wrappedFileKey = obj["wrappedFileKeyB64"] as? String,
+              let accessToken, let base = normalizedServerURL else { return nil }
+        var req = URLRequest(url: base.appendingPathComponent("attachments/\(attachmentId)"))
+        req.setValue("Bearer \(accessToken)", forHTTPHeaderField: "Authorization")
+        let (cipher, response) = try await URLSession.shared.data(for: req)
+        guard (response as? HTTPURLResponse)?.statusCode == 200 else { throw APIClient.APIError.decoding }
+        let fileKey = try OpenPassCrypto.unwrapKey(wrapper: vaultKey, blob: Data(base64Encoded: wrappedFileKey) ?? Data())
+        let data = try OpenPassCrypto.decryptFile(vaultKey: fileKey, blob: cipher)
+        return (obj["fileName"] as? String ?? "download", data)
     }
 }

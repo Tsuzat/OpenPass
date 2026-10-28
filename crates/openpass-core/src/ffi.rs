@@ -145,6 +145,16 @@ pub fn ffi_passkey_sign(private_key_pkcs8: Vec<u8>, data: Vec<u8>) -> Result<Vec
 }
 
 #[uniffi::export]
+pub fn ffi_base32_decode(text: String) -> Result<Vec<u8>, FfiError> {
+    crate::base32_decode(&text).map_err(FfiError::from)
+}
+
+#[uniffi::export]
+pub fn ffi_base32_encode(data: Vec<u8>) -> String {
+    crate::base32_encode(&data)
+}
+
+#[uniffi::export]
 pub fn ffi_generate_totp_secret() -> Vec<u8> {
     generate_totp_secret()
 }

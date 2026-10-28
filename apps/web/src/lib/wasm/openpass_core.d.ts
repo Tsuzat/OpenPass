@@ -1,6 +1,8 @@
 /* tslint:disable */
 /* eslint-disable */
 
+export function base32Decode(text: string): string;
+
 export function decryptBytesB64(key_b64: string, blob_b64: string, aad: string): string;
 
 export function decryptFileB64(file_key_b64: string, blob_b64: string): string;
@@ -56,6 +58,7 @@ export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembl
 
 export interface InitOutput {
     readonly memory: WebAssembly.Memory;
+    readonly base32Decode: (a: number, b: number) => [number, number, number, number];
     readonly decryptBytesB64: (a: number, b: number, c: number, d: number, e: number, f: number) => [number, number, number, number];
     readonly decryptFileB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly decryptItem: (a: number, b: number, c: number, d: number, e: number, f: number, g: number, h: number) => [number, number, number, number];
