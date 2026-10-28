@@ -15,6 +15,13 @@ bun run setup   # wrangler login → creates D1 + R2 → applies migrations → 
 4. Generates `SESSION_PEPPER` → `wrangler secret put`
 5. `wrangler deploy`
 
+Environment variables for every component are documented in `.env.example`
+files (repo root has the index). The Worker uses `wrangler.jsonc` vars +
+`wrangler secret put` in production and `.dev.vars` locally — see
+`services/api/.env.example`. Clients take their default server URL from
+build-time env (`VITE_SERVER_URL` web, `OPENPASS_API_URL` Android) with
+in-app configuration taking precedence.
+
 ## Config (`wrangler.jsonc` vars)
 
 | Var | Default | Meaning |

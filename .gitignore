@@ -3,6 +3,9 @@ dist/
 target/
 .wrangler/
 .dev.vars*
+.env
+.env.*
+!.env.example
 *.local
 .DS_Store
 build/

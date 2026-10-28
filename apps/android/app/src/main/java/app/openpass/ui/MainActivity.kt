@@ -15,8 +15,9 @@ import app.openpass.core.UrlConnectionVaultClient
 import app.openpass.core.VaultStore
 import java.util.concurrent.Executors
 
-// Configure your self-hosted Worker URL here (in-app settings screen lands later).
-private const val SERVER_URL = "https://your-worker.example.com"
+// Default self-hosted Worker URL, baked in at build time (see .env.example:
+// OPENPASS_API_URL env var or -Popenpass.apiUrl). In-app settings screen lands later.
+private val SERVER_URL: String = app.openpass.BuildConfig.OPENPASS_API_URL
 
 // FragmentActivity (not plain ComponentActivity) because BiometricPrompt requires it.
 class MainActivity : FragmentActivity() {

@@ -1,7 +1,8 @@
 /** API client for the web vault. Crypto runs in a Web Worker via the Rust core compiled to WASM (Phase 2). */
 
 export function getServerUrl(): string {
-  return localStorage.getItem("openpass.serverUrl") ?? "http://localhost:8787";
+  // Priority: user-configured (localStorage) > build-time default (VITE_SERVER_URL, see .env.example) > local dev
+  return localStorage.getItem("openpass.serverUrl") ?? import.meta.env.VITE_SERVER_URL ?? "http://localhost:8787";
 }
 export function setServerUrl(url: string) {
   localStorage.setItem("openpass.serverUrl", url.replace(/\/$/, ""));
