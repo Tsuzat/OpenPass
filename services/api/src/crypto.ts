@@ -21,8 +21,15 @@ export async function sha256Hex(text: string): Promise<string> {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, "0")).join("");
 }
 
-/** PBKDF2-HMAC-SHA256 over the already-derived verifier. Format: pbkdf2$iter$saltB64$hashB64 */
-export async function hashVerifier(verifierB64: string, iterations = 600_000): Promise<string> {
+/**
+ * PBKDF2-HMAC-SHA256 over the already-derived verifier. Format: pbkdf2$iter$saltB64$hashB64
+ * NOTE: Cloudflare Workers' WebCrypto caps PBKDF2 at 100,000 iterations — exceeding it
+ * throws on real Workers (Miniflare locally does not enforce the cap). The verifier being
+ * hashed is already an Argon2id-derived 256-bit key, so this layer is storage hardening;
+ * 100k stays within the Workers limit. verifyVerifier reads the count from the stored
+ * string, so hashes created at other iteration counts remain verifiable.
+ */
+export async function hashVerifier(verifierB64: string, iterations = 100_000): Promise<string> {
   const salt = new Uint8Array(16);
   crypto.getRandomValues(salt);
   const key = await crypto.subtle.importKey("raw", b64ToBytes(verifierB64) as BufferSource, "PBKDF2", false, ["deriveBits"]);

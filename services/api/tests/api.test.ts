@@ -175,6 +175,16 @@ describe("item history", () => {
   });
 });
 
+describe("verifier hashing (Workers limits)", () => {
+  test("default hash uses Workers-safe PBKDF2 iterations and verifies", async () => {
+    const { hashVerifier, verifyVerifier } = await import("../src/crypto");
+    const stored = await hashVerifier(VERIFIER);
+    expect(stored.startsWith("pbkdf2$100000$")).toBe(true);
+    expect(await verifyVerifier(VERIFIER, stored)).toBe(true);
+    expect(await verifyVerifier(Buffer.from(new Uint8Array(32).fill(9)).toString("base64"), stored)).toBe(false);
+  });
+});
+
 describe("attachments", () => {
   test("upload/download/delete encrypted blob, owner-only", async () => {
     const app = setup();

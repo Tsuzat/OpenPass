@@ -13,7 +13,7 @@ Implemented in `crates/openpass-core`. This document is normative; code must mat
 | Recovery key | 256-bit random, encoded as grouped Base32 (XXXX-XXXX-…) |
 | Recovery proof | `HKDF-SHA256(recoveryKey, info="openpass/recovery-auth/v1")` — server stores PBKDF2 of this; proves recovery-key possession without revealing the key that also wraps the vault key |
 | TOTP | RFC 6238, HMAC-SHA-1 (compat) / SHA-256, 30 s period, 6 digits default |
-| Server verifier storage | PBKDF2-HMAC-SHA-256, 600k iterations, per-user salt (WebCrypto-native on Workers; verifier is already a derived key, never the password) |
+| Server verifier storage | PBKDF2-HMAC-SHA-256, 100k iterations, per-user salt (WebCrypto-native; Workers caps PBKDF2 at 100k iterations — exceeding it throws on real Workers. Verifier is already an Argon2id-derived key, never the password; iteration count is stored in the hash string so it can change) |
 
 ## Key hierarchy
 

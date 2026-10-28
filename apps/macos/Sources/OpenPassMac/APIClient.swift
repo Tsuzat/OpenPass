@@ -37,7 +37,11 @@ struct APIClient {
                 case "UNAUTHORIZED": return "Session expired. Please sign in again."
                 default: return "Server error: \(code)"
                 }
-            case .http(let status, _): return "Server returned HTTP \(status). Check the server URL."
+            case .http(let status, _):
+                if status >= 500 {
+                    return "The server hit an internal error (HTTP \(status)). If you just deployed, make sure the D1 migrations were applied (wrangler d1 migrations apply openpass --remote), then redeploy."
+                }
+                return "Server returned HTTP \(status). Check the server URL."
             case .decoding: return "Unexpected response from the server. Check the server URL is your OpenPass API."
             }
         }

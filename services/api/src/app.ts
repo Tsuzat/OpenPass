@@ -30,6 +30,13 @@ const DEFAULT_KDF = { memoryKib: 65536, iterations: 3, parallelism: 4 };
 
 export function createApp(store: Store, opts: AppOptions = {}) {
   const app = new Hono<AppEnv>();
+
+  // Never leak Hono's bare "Internal Server Error": return the API error shape
+  // and log server-side (visible in `wrangler tail` / Workers Logs).
+  app.onError((e, c) => {
+    console.error("Unhandled API error:", e);
+    return c.json({ error: { code: "INTERNAL", message: "Internal server error" } }, 500);
+  });
   const now = opts.now ?? (() => Date.now());
   const attempts = new Map<string, { count: number; resetAt: number }>();
 
