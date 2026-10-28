@@ -97,6 +97,11 @@ pub fn parse_recovery_key_js(text: &str) -> Result<String, JsValue> {
     Ok(b64(&parse_recovery_key(text).map_err(|_| JsValue::from_str("invalid recovery key"))?))
 }
 
+#[wasm_bindgen(js_name = recoveryAuthProof)]
+pub fn recovery_auth_proof_js(recovery_key_b64: &str) -> Result<String, JsValue> {
+    Ok(b64(&crate::recovery_auth_proof(&key32(recovery_key_b64)?)))
+}
+
 #[wasm_bindgen(js_name = generateTotpSecretB32)]
 pub fn generate_totp_secret_b32() -> String {
     crate::base32_encode(&generate_totp_secret())

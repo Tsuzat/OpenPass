@@ -5,7 +5,7 @@
  */
 import init, {
   deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
-  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, totpAt, generatePassword,
+  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
   generateTotpSecretB32,
 } from "./wasm/openpass_core.js";
 
@@ -23,6 +23,7 @@ const ops: Record<string, (...args: never[]) => unknown> = {
   decryptItem: (vk: string, id: string, ct: string, wk: string) => decryptItem(vk, id, ct, wk),
   generateRecoveryKey: () => generateRecoveryKey(),
   parseRecoveryKey: (t: string) => parseRecoveryKey(t),
+  recoveryAuthProof: (k: string) => recoveryAuthProof(k),
   totpAt: (s: string, at: string, digits: number, sha256: boolean) => totpAt(s, BigInt(at), 30n, digits, sha256),
   generatePassword: (len: number) => generatePassword(len),
   generateTotpSecretB32: () => generateTotpSecretB32(),

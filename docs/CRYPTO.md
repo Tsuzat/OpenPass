@@ -11,6 +11,7 @@ Implemented in `crates/openpass-core`. This document is normative; code must mat
 | Symmetric encryption | XChaCha20-Poly1305, 24-byte random nonce per operation |
 | Wrapping | Same AEAD; wrapped blob = `version(1) ‖ nonce(24) ‖ ciphertext` |
 | Recovery key | 256-bit random, encoded as grouped Base32 (XXXX-XXXX-…) |
+| Recovery proof | `HKDF-SHA256(recoveryKey, info="openpass/recovery-auth/v1")` — server stores PBKDF2 of this; proves recovery-key possession without revealing the key that also wraps the vault key |
 | TOTP | RFC 6238, HMAC-SHA-1 (compat) / SHA-256, 30 s period, 6 digits default |
 | Server verifier storage | PBKDF2-HMAC-SHA-256, 600k iterations, per-user salt (WebCrypto-native on Workers; verifier is already a derived key, never the password) |
 

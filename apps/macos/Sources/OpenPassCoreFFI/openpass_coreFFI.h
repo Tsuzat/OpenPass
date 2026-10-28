@@ -310,6 +310,11 @@ RustBuffer uniffi_openpass_core_fn_func_ffi_random_key(RustCallStatus *_Nonnull 
     
 );
 #endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_RECOVERY_AUTH_PROOF
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_RECOVERY_AUTH_PROOF
+RustBuffer uniffi_openpass_core_fn_func_ffi_recovery_auth_proof(RustBuffer recovery_key, RustCallStatus *_Nonnull out_status
+);
+#endif
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_TOTP_AT
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_FN_FUNC_FFI_TOTP_AT
 RustBuffer uniffi_openpass_core_fn_func_ffi_totp_at(RustBuffer secret, uint64_t unix_seconds, uint64_t period, uint32_t digits, RustBuffer algorithm, RustCallStatus *_Nonnull out_status
@@ -668,6 +673,12 @@ uint16_t uniffi_openpass_core_checksum_func_ffi_parse_recovery_key(void
 #ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_RANDOM_KEY
 #define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_RANDOM_KEY
 uint16_t uniffi_openpass_core_checksum_func_ffi_random_key(void
+    
+);
+#endif
+#ifndef UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_RECOVERY_AUTH_PROOF
+#define UNIFFI_FFIDEF_UNIFFI_OPENPASS_CORE_CHECKSUM_FUNC_FFI_RECOVERY_AUTH_PROOF
+uint16_t uniffi_openpass_core_checksum_func_ffi_recovery_auth_proof(void
     
 );
 #endif

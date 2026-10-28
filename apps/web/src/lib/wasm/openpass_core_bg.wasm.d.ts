@@ -10,6 +10,7 @@ export const generateRecoveryKey: () => [number, number, number, number];
 export const generateTotpSecretB32: () => [number, number];
 export const parseRecoveryKey: (a: number, b: number) => [number, number, number, number];
 export const randomKeyB64: () => [number, number];
+export const recoveryAuthProof: (a: number, b: number) => [number, number, number, number];
 export const totpAt: (a: number, b: number, c: bigint, d: bigint, e: number, f: number) => [number, number, number, number];
 export const unwrapKeyB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
 export const wrapKeyB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];

@@ -98,6 +98,11 @@ pub fn ffi_parse_recovery_key(text: String) -> Result<Vec<u8>, FfiError> {
 }
 
 #[uniffi::export]
+pub fn ffi_recovery_auth_proof(recovery_key: Vec<u8>) -> Result<Vec<u8>, FfiError> {
+    Ok(crate::recovery_auth_proof(&key32(&recovery_key)?).to_vec())
+}
+
+#[uniffi::export]
 pub fn ffi_generate_totp_secret() -> Vec<u8> {
     generate_totp_secret()
 }

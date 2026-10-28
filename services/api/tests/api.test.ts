@@ -17,11 +17,13 @@ async function req(app: ReturnType<typeof setup>, path: string, method: string, 
   });
   return { status: res.status, json: (await res.json()) as any };
 }
+const RECOVERY_PROOF = Buffer.from(new Uint8Array(32).fill(11)).toString("base64");
 const registerBody = (device = deviceA) => ({
   email: "User@Example.com", authVerifierB64: VERIFIER,
   kdfSaltB64: Buffer.from("0123456789abcdef").toString("base64"),
   kdfParams: { memoryKib: 65536, iterations: 3, parallelism: 4 },
   wrappedVaultKeyB64: "wrapped==", recoveryWrappedVaultKeyB64: "recovery==",
+  recoveryAuthProofB64: RECOVERY_PROOF,
   identityPublicKeyB64: "pub==", wrappedIdentityPrivateKeyB64: "priv==", device,
 });
 
@@ -82,6 +84,58 @@ describe("auth + device approval", () => {
     expect(reuse.status).toBe(401);
     const vault = await req(app, "/vault", "GET", undefined, refreshed.json.accessToken);
     expect(vault.status).toBe(401);
+  });
+});
+
+describe("password change + recovery", () => {
+  const NEW_VERIFIER = Buffer.from(new Uint8Array(32).fill(21)).toString("base64");
+
+  test("change-password requires current verifier, then new verifier logs in", async () => {
+    const app = setup();
+    const reg = await req(app, "/auth/register", "POST", registerBody());
+    const bad = await req(app, "/auth/change-password", "POST", {
+      currentAuthVerifierB64: Buffer.from(new Uint8Array(32).fill(9)).toString("base64"),
+      newAuthVerifierB64: NEW_VERIFIER, kdfSaltB64: registerBody().kdfSaltB64,
+      kdfParams: registerBody().kdfParams, wrappedVaultKeyB64: "wrapped2==",
+    }, reg.json.accessToken);
+    expect(bad.status).toBe(401);
+
+    const ok = await req(app, "/auth/change-password", "POST", {
+      currentAuthVerifierB64: VERIFIER, newAuthVerifierB64: NEW_VERIFIER,
+      kdfSaltB64: registerBody().kdfSaltB64, kdfParams: registerBody().kdfParams, wrappedVaultKeyB64: "wrapped2==",
+    }, reg.json.accessToken);
+    expect(ok.status).toBe(200);
+
+    const oldLogin = await req(app, "/auth/login", "POST", { email: "user@example.com", authVerifierB64: VERIFIER, device: deviceA });
+    expect(oldLogin.status).toBe(401);
+    const newLogin = await req(app, "/auth/login", "POST", { email: "user@example.com", authVerifierB64: NEW_VERIFIER, device: deviceA });
+    expect(newLogin.status).toBe(200);
+    expect(newLogin.json.wrappedVaultKeyB64).toBe("wrapped2==");
+  });
+
+  test("recovery proof gates recovery-info and recover; wrong proof rejected", async () => {
+    const app = setup();
+    await req(app, "/auth/register", "POST", registerBody());
+
+    const wrong = await req(app, "/auth/recovery-info", "POST", { email: "user@example.com", recoveryAuthProofB64: VERIFIER });
+    expect(wrong.status).toBe(401);
+
+    const info = await req(app, "/auth/recovery-info", "POST", { email: "user@example.com", recoveryAuthProofB64: RECOVERY_PROOF });
+    expect(info.status).toBe(200);
+    expect(info.json.recoveryWrappedVaultKeyB64).toBe("recovery==");
+
+    const rec = await req(app, "/auth/recover", "POST", {
+      email: "user@example.com", recoveryAuthProofB64: RECOVERY_PROOF,
+      newAuthVerifierB64: NEW_VERIFIER, kdfSaltB64: registerBody().kdfSaltB64,
+      kdfParams: registerBody().kdfParams, wrappedVaultKeyB64: "wrapped3==", recoveryWrappedVaultKeyB64: "recovery3==",
+    });
+    expect(rec.status).toBe(200);
+
+    const login = await req(app, "/auth/login", "POST", { email: "user@example.com", authVerifierB64: NEW_VERIFIER, device: deviceA });
+    expect(login.status).toBe(200);
+    // recovery key unchanged: proof still works after recovery
+    const info2 = await req(app, "/auth/recovery-info", "POST", { email: "user@example.com", recoveryAuthProofB64: RECOVERY_PROOF });
+    expect(info2.json.recoveryWrappedVaultKeyB64).toBe("recovery3==");
   });
 });
 

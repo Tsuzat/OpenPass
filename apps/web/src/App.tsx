@@ -9,7 +9,14 @@ export default function App() {
   const [server, setServer] = useState(getServerUrl());
   const [healthy, setHealthy] = useState<boolean | null>(null);
   const [view, setView] = useState<"auth" | "vault">("auth");
-  const [mode, setMode] = useState<"login" | "register">("login");
+  const [mode, setMode] = useState<"login" | "register" | "recover">("login");
+  const [recoveryInput, setRecoveryInput] = useState("");
+  const [newPassword, setNewPassword] = useState("");
+  const [search, setSearch] = useState("");
+  const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
+  const [reveal, setReveal] = useState(false);
+  const [pwChange, setPwChange] = useState({ current: "", next: "" });
+  const [pwMsg, setPwMsg] = useState("");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [busy, setBusy] = useState("");
@@ -66,7 +73,10 @@ export default function App() {
     setError(""); setBusy("Deriving keys locally (Argon2id, in a Web Worker)…");
     await new Promise((r) => setTimeout(r, 50));
     try {
-      if (mode === "register") {
+      if (mode === "recover") {
+        await vault.recoverWithRecoveryKey(email, recoveryInput, newPassword);
+        setOffline(false);
+      } else if (mode === "register") {
         const { recoveryKeyText } = await vault.register(email, password);
         setRecoveryKey(recoveryKeyText);
         setOffline(false);
@@ -117,11 +127,13 @@ export default function App() {
             <button onClick={() => setRecoveryKey("")}>I saved it</button>
           </div>
         )}
-        <h2>Items ({items.length})</h2>
+        <input style={{ ...input, marginBottom: 12 }} placeholder="Search name, username, issuer…" value={search}
+          onChange={(e) => setSearch(e.target.value)} />
+        <h2>Items ({items.filter((i) => !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase())).length})</h2>
         {items.length === 0 && <p>No items yet. Add one below — it is encrypted on this device before sync.</p>}
         <ul>
-          {items.map((i) => (
-            <li key={i.id}>
+          {items.filter((i) => !search || `${i.name} ${String(i.plaintext.username ?? "")} ${String(i.plaintext.issuer ?? "")}`.toLowerCase().includes(search.toLowerCase())).map((i) => (
+            <li key={i.id} onClick={() => { setSelected(i); setReveal(false); }} style={{ cursor: "pointer" }}>
               <strong>{i.name}</strong> <span style={{ color: "#888" }}>{i.type}</span>
               {i.type === "login" && <span> — {String(i.plaintext.username ?? "")}</span>}
               {i.type === "card" && <span> — •••• {String(i.plaintext.number ?? "").slice(-4)}</span>}
@@ -130,6 +142,49 @@ export default function App() {
             </li>
           ))}
         </ul>
+
+        {selected && (
+          <div style={{ border: "1px solid #ccc", padding: 12, marginBottom: 16 }}>
+            <h3 style={{ marginTop: 0 }}>{selected.name} <span style={{ color: "#888", fontWeight: 400 }}>{selected.type} · rev {selected.revision}</span></h3>
+            {selected.type === "login" && <>
+              <p>Username: {String(selected.plaintext.username ?? "")}</p>
+              <p>Password: <code>{reveal ? String(selected.plaintext.password ?? "") : "••••••••"}</code>{" "}
+                <button onClick={() => setReveal(!reveal)}>{reveal ? "Hide" : "Reveal"}</button>{" "}
+                <button onClick={() => navigator.clipboard.writeText(String(selected.plaintext.password ?? ""))}>Copy</button></p>
+              <p>URL: {((selected.plaintext.uris as { uri: string }[] | undefined)?.[0]?.uri) ?? ""}</p>
+            </>}
+            {selected.type === "totp" && <p>Code: <code style={{ fontSize: 18 }}>{codes[selected.id] ?? "······"}</code></p>}
+            {selected.type === "secure_note" && <pre style={{ whiteSpace: "pre-wrap" }}>{String(selected.plaintext.content ?? "")}</pre>}
+            {selected.type === "card" && <p>•••• {String(selected.plaintext.number ?? "").slice(-4)} · {String(selected.plaintext.cardholder ?? "")}</p>}
+            <label>Rename
+              <input style={input} defaultValue={selected.name} id="op-rename" />
+            </label>
+            <div style={{ display: "flex", gap: 8, marginTop: 8 }}>
+              <button onClick={async () => {
+                const v = (document.getElementById("op-rename") as HTMLInputElement).value;
+                await vault.updateItem(selected, { name: v }); setSelected(null); await refreshItems();
+              }}>Save rename</button>
+              <button style={{ color: "#c00" }} onClick={async () => {
+                if (!confirm(`Delete "${selected.name}"? This syncs a tombstone to all devices.`)) return;
+                await vault.deleteItem(selected.id); setSelected(null); await refreshItems();
+              }}>Delete</button>
+              <button onClick={() => setSelected(null)}>Close</button>
+            </div>
+          </div>
+        )}
+
+        <details style={{ marginBottom: 16 }}>
+          <summary>Change master password</summary>
+          <label>Current password<input style={input} type="password" value={pwChange.current} onChange={(e) => setPwChange({ ...pwChange, current: e.target.value })} /></label>
+          <label>New password<input style={input} type="password" value={pwChange.next} onChange={(e) => setPwChange({ ...pwChange, next: e.target.value })} /></label>
+          <button disabled={offline || !pwChange.current || pwChange.next.length < 8} onClick={async () => {
+            setPwMsg("");
+            try { await vault.changePassword(pwChange.current, pwChange.next); setPwMsg("Password changed. Other sessions were revoked."); setPwChange({ current: "", next: "" }); }
+            catch (e) { setPwMsg(`Failed: ${(e as Error).message}`); }
+          }}>Change password</button>
+          {offline && <span style={{ color: "#b58900" }}> Requires connection.</span>}
+          {pwMsg && <p>{pwMsg}</p>}
+        </details>
 
         <h3>Add item</h3>
         <label>Type
@@ -194,15 +249,32 @@ export default function App() {
       <div style={{ display: "flex", gap: 8, marginBottom: 12 }}>
         <button onClick={() => setMode("login")} disabled={mode === "login"}>Log in</button>
         <button onClick={() => setMode("register")} disabled={mode === "register"}>Create account</button>
+        <button onClick={() => setMode("recover")} disabled={mode === "recover"}>Use recovery key</button>
       </div>
       <label style={{ display: "block", marginBottom: 12 }}>Email<input style={input} value={email} onChange={(e) => setEmail(e.target.value)} /></label>
-      <label style={{ display: "block", marginBottom: 12 }}>
-        Master password (min. 12 chars recommended)
-        <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
-      </label>
-      <button onClick={submit} disabled={!email || password.length < 8 || !!busy}>
-        {mode === "register" ? "Create vault" : "Unlock"}
-      </button>
+      {mode === "recover" ? (
+        <>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            Recovery Key
+            <textarea style={input} rows={3} value={recoveryInput} onChange={(e) => setRecoveryInput(e.target.value)} placeholder="XXXX-XXXX-XXXX-…" />
+          </label>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            New master password (min. 12 chars recommended)
+            <input style={input} type="password" value={newPassword} onChange={(e) => setNewPassword(e.target.value)} />
+          </label>
+          <button onClick={submit} disabled={!email || !recoveryInput || newPassword.length < 8 || !!busy}>Recover &amp; set new password</button>
+        </>
+      ) : (
+        <>
+          <label style={{ display: "block", marginBottom: 12 }}>
+            Master password (min. 12 chars recommended)
+            <input style={input} type="password" value={password} onChange={(e) => setPassword(e.target.value)} />
+          </label>
+          <button onClick={submit} disabled={!email || password.length < 8 || !!busy}>
+            {mode === "register" ? "Create vault" : "Unlock"}
+          </button>
+        </>
+      )}
       {busy && <p>{busy}</p>}
       {error && <p style={{ color: "#c00" }}>{error}</p>}
     </main>

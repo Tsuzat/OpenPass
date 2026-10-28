@@ -27,6 +27,10 @@ enum OpenPassCrypto {
         try ffiDecryptItem(vaultKey: vaultKey, itemId: itemId, item: item)
     }
 
+    static func recoveryAuthProof(recoveryKey: Data) throws -> Data { try ffiRecoveryAuthProof(recoveryKey: recoveryKey) }
+    static func generateRecoveryKey() -> RecoveryKey { ffiGenerateRecoveryKey() }
+    static func parseRecoveryKey(text: String) throws -> Data { try ffiParseRecoveryKey(text: text) }
+
     static func totp(secret: Data, at date: Date = Date(), digits: UInt32 = 6) -> String {
         ffiTotpAt(secret: secret, unixSeconds: UInt64(date.timeIntervalSince1970), period: 30, digits: digits, algorithm: .sha1)
     }

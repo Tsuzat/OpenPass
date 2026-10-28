@@ -22,6 +22,8 @@ export function parseRecoveryKey(text: string): string;
 
 export function randomKeyB64(): string;
 
+export function recoveryAuthProof(recovery_key_b64: string): string;
+
 export function totpAt(secret_b32: string, unix_seconds: bigint, period: bigint, digits: number, sha256: boolean): string;
 
 export function unwrapKeyB64(wrapper_b64: string, blob_b64: string): string;
@@ -41,6 +43,7 @@ export interface InitOutput {
     readonly generateTotpSecretB32: () => [number, number];
     readonly parseRecoveryKey: (a: number, b: number) => [number, number, number, number];
     readonly randomKeyB64: () => [number, number];
+    readonly recoveryAuthProof: (a: number, b: number) => [number, number, number, number];
     readonly totpAt: (a: number, b: number, c: bigint, d: bigint, e: number, f: number) => [number, number, number, number];
     readonly unwrapKeyB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];
     readonly wrapKeyB64: (a: number, b: number, c: number, d: number) => [number, number, number, number];

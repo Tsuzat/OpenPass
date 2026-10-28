@@ -3,6 +3,7 @@ export interface UserRow {
   kdfSaltB64: string; kdfParamsJson: string;
   wrappedVaultKeyB64: string; recoveryWrappedVaultKeyB64: string;
   identityPublicKeyB64: string; wrappedIdentityPrivateKeyB64: string;
+  recoveryVerifierHash: string;
   vaultId: string; createdAt: string;
 }
 export interface DeviceRow {
@@ -39,6 +40,7 @@ export interface Store {
   updateSessionTokens(id: string, accessHash: string, refreshHash: string, prevRefreshHash: string, accessExpiresAt: number, refreshExpiresAt: number): Promise<void>;
   revokeSession(id: string): Promise<void>;
   revokeDeviceSessions(userId: string, deviceId: string): Promise<void>;
+  revokeOtherSessions(userId: string, keepSessionId: string | null): Promise<void>;
   getItem(vaultId: string, itemId: string): Promise<ItemRow | null>;
   upsertItem(i: ItemRow): Promise<void>;
   listItemsSince(vaultId: string, sinceIso: string | null): Promise<ItemRow[]>;

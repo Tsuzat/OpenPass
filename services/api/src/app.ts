@@ -1,6 +1,6 @@
 import { Hono } from "hono";
 import { cors } from "hono/cors";
-import { CipherItem, LoginRequest, PreloginRequest, RegisterRequest, SyncPushRequest } from "@openpass/shared";
+import { ChangePasswordRequest, CipherItem, LoginRequest, PreloginRequest, RecoverRequest, RecoveryInfoRequest, RegisterRequest, SyncPushRequest } from "@openpass/shared";
 import type { Store } from "./store/types";
 import { fakeSaltB64, hashVerifier, randomTokenB64, sha256Hex, verifyVerifier } from "./crypto";
 
@@ -92,6 +92,7 @@ export function createApp(store: Store, opts: AppOptions = {}) {
       kdfSaltB64: d.kdfSaltB64, kdfParamsJson: JSON.stringify(d.kdfParams),
       wrappedVaultKeyB64: d.wrappedVaultKeyB64, recoveryWrappedVaultKeyB64: d.recoveryWrappedVaultKeyB64,
       identityPublicKeyB64: d.identityPublicKeyB64, wrappedIdentityPrivateKeyB64: d.wrappedIdentityPrivateKeyB64,
+      recoveryVerifierHash: await hashVerifier(d.recoveryAuthProofB64, opts.pbkdf2Iterations),
       vaultId, createdAt: ts,
     });
     // Bootstrap device is auto-approved.
@@ -150,6 +151,49 @@ export function createApp(store: Store, opts: AppOptions = {}) {
     const refreshToken = randomTokenB64();
     await store.updateSessionTokens(session.id, await sha256Hex(accessToken), await sha256Hex(refreshToken), session.refreshHash, now() + ACCESS_TTL, now() + REFRESH_TTL);
     return c.json({ accessToken, refreshToken, sessionId: session.id });
+  });
+
+  app.post("/auth/change-password", requireAuth, async (c) => {
+    const { user, session } = (c as any).get("auth");
+    const body = ChangePasswordRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const d = body.data;
+    if (!(await verifyVerifier(d.currentAuthVerifierB64, user.verifierHash))) return err(c, 401, "INVALID_CREDENTIALS");
+    await store.updateUserVerifier(user.id, await hashVerifier(d.newAuthVerifierB64, opts.pbkdf2Iterations),
+      d.wrappedVaultKeyB64, user.recoveryWrappedVaultKeyB64, d.kdfSaltB64, JSON.stringify(d.kdfParams));
+    await store.revokeOtherSessions(user.id, session.id);
+    await store.audit(user.id, "password_changed", session.deviceId);
+    return c.json({ ok: true });
+  });
+
+  // Recovery step 1: prove recovery-key possession, receive the recovery-wrapped vault key.
+  app.post("/auth/recovery-info", async (c) => {
+    if (rateLimited(`recovery:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
+    const body = RecoveryInfoRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const user = await store.getUserByEmail(body.data.email.toLowerCase());
+    if (!user || !user.recoveryVerifierHash || !(await verifyVerifier(body.data.recoveryAuthProofB64, user.recoveryVerifierHash))) {
+      return err(c, 401, "INVALID_CREDENTIALS");
+    }
+    return c.json({ recoveryWrappedVaultKeyB64: user.recoveryWrappedVaultKeyB64, vaultId: user.vaultId });
+  });
+
+  // Recovery step 2: same proof authorizes replacing the auth verifier + wrapped keys.
+  // The recovery key itself does not change, so its verifier hash and wrap remain valid.
+  app.post("/auth/recover", async (c) => {
+    if (rateLimited(`recover:${c.req.header("CF-Connecting-IP") ?? "local"}`, 10)) return err(c, 429, "RATE_LIMITED");
+    const body = RecoverRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const d = body.data;
+    const user = await store.getUserByEmail(d.email.toLowerCase());
+    if (!user || !user.recoveryVerifierHash || !(await verifyVerifier(d.recoveryAuthProofB64, user.recoveryVerifierHash))) {
+      return err(c, 401, "INVALID_CREDENTIALS");
+    }
+    await store.updateUserVerifier(user.id, await hashVerifier(d.newAuthVerifierB64, opts.pbkdf2Iterations),
+      d.wrappedVaultKeyB64, d.recoveryWrappedVaultKeyB64, d.kdfSaltB64, JSON.stringify(d.kdfParams));
+    await store.revokeOtherSessions(user.id, null); // all sessions revoked; user logs in fresh
+    await store.audit(user.id, "account_recovered", "");
+    return c.json({ ok: true });
   });
 
   app.post("/auth/logout", requireAuth, async (c) => {

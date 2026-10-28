@@ -6,7 +6,7 @@
  */
 import init, {
   deriveAuthMaterial, generateKdfParams, randomKeyB64, wrapKeyB64, unwrapKeyB64,
-  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, totpAt, generatePassword,
+  encryptItem, decryptItem, generateRecoveryKey, parseRecoveryKey, recoveryAuthProof, totpAt, generatePassword,
   generateTotpSecretB32,
 } from "./wasm/openpass_core.js";
 import wasmUrl from "./wasm/openpass_core_bg.wasm?url";
@@ -85,6 +85,9 @@ export async function newRecoveryKey(): Promise<{ text: string; keyB64: string }
 }
 export async function parseRecovery(text: string): Promise<string> {
   return call("parseRecoveryKey", () => parseRecoveryKey(text), text);
+}
+export async function recoveryProof(recoveryKeyB64: string): Promise<string> {
+  return call("recoveryAuthProof", () => recoveryAuthProof(recoveryKeyB64), recoveryKeyB64);
 }
 export async function totp(secretB32: string, atSeconds = Math.floor(Date.now() / 1000), digits = 6, sha256 = false): Promise<string> {
   return call("totpAt", () => totpAt(secretB32, BigInt(atSeconds), 30n, digits, sha256), secretB32, String(atSeconds), digits, sha256);

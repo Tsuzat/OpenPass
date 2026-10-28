@@ -11,7 +11,17 @@ import VaultKit
 final class VaultStore: ObservableObject {
     @Published var isUnlocked = false
     @Published var serverURL = "https://your-worker.example.com"
+    @Published var email = ""
     private var autoLockTask: Task<Void, Never>?
+    private(set) var accessToken: String?
+    private var vaultKey: Data?
+
+    var deviceId: String {
+        if let id = UserDefaults.standard.string(forKey: "openpass.deviceId") { return id }
+        let id = UUID().uuidString
+        UserDefaults.standard.set(id, forKey: "openpass.deviceId")
+        return id
+    }
 
     /// Biometric availability for arming device-local wrapped VaultKey (Secure Enclave).
     var biometricsAvailable: Bool {
@@ -35,18 +45,34 @@ final class VaultStore: ObservableObject {
     }
 
     func unlockWithMasterPassword(_ password: String) async throws {
-        // Full flow (auth layer): prelogin -> OpenPassCrypto.deriveAuthMaterial ->
-        // POST /auth/login -> OpenPassCrypto.unwrapKey(kek, wrappedVaultKey) ->
-        // VaultKit SyncEngine pull -> decrypt items on demand via OpenPassCrypto.
-        _ = password
+        guard let base = URL(string: serverURL) else { throw APIClient.APIError.decoding }
+        let client = APIClient(baseURL: base)
+        let pre = try await client.prelogin(email: email)
+        let params = KdfParams(memoryKib: pre.kdfParams.memoryKib, iterations: pre.kdfParams.iterations,
+                               parallelism: pre.kdfParams.parallelism, saltB64: pre.kdfSaltB64)
+        let auth = try OpenPassCrypto.deriveAuthMaterial(password: password, params: params)
+        let resp = try await client.login(email: email, authVerifier: auth.authVerifier,
+                                          deviceId: deviceId, deviceName: Host.current().localizedName ?? "Mac")
+        guard let wrapped = Data(base64Encoded: resp.wrappedVaultKeyB64) else { throw APIClient.APIError.decoding }
+        vaultKey = try OpenPassCrypto.unwrapKey(wrapper: auth.kek, blob: wrapped)
+        accessToken = resp.accessToken
+        // NOTE: VaultKit SyncEngine pull + Secure Enclave re-wrap of vaultKey for
+        // Touch ID are wired in the Xcode target (App Group container choice pending).
         isUnlocked = true
         scheduleAutoLock(minutes: 5)
     }
 
+    /// In-memory vault key for item decryption via OpenPassCrypto. Never persisted unwrapped.
+    func withVaultKey<T>(_ body: (Data) throws -> T) throws -> T {
+        guard let vaultKey else { throw APIClient.APIError.decoding }
+        return try body(vaultKey)
+    }
+
     func lock() {
         isUnlocked = false
+        accessToken = nil
+        vaultKey = nil // Data release; Rust-side keys are zeroized by the core on drop
         autoLockTask?.cancel()
-        // TODO Phase 2: zeroize key material via Rust core handle drop.
     }
 
     private func scheduleAutoLock(minutes: Int) {

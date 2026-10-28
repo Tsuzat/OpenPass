@@ -45,4 +45,8 @@ object OpenPassCrypto {
 
     fun generatePassword(length: UInt = 20u): String = ffiGeneratePassword(length)
     fun generateRecoveryKey() = ffiGenerateRecoveryKey()
+    fun recoveryAuthProof(recoveryKey: ByteArray): ByteArray =
+        app.openpass.core.ffi.ffiRecoveryAuthProof(recoveryKey)
+    fun parseRecoveryKey(text: String): ByteArray =
+        app.openpass.core.ffi.ffiParseRecoveryKey(text)
 }

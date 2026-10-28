@@ -739,6 +739,8 @@ internal interface UniffiForeignFutureCompleteVoid : com.sun.jna.Callback {
 
 
 
+
+
 // A JNA Library to expose the extern-C FFI definitions.
 // This is an implementation detail which will be called internally by the public API.
 
@@ -775,6 +777,8 @@ internal interface UniffiLib : Library {
     fun uniffi_openpass_core_fn_func_ffi_parse_recovery_key(`text`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_random_key(uniffi_out_err: UniffiRustCallStatus, 
+    ): RustBuffer.ByValue
+    fun uniffi_openpass_core_fn_func_ffi_recovery_auth_proof(`recoveryKey`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
     fun uniffi_openpass_core_fn_func_ffi_totp_at(`secret`: RustBuffer.ByValue,`unixSeconds`: Long,`period`: Long,`digits`: Int,`algorithm`: RustBuffer.ByValue,uniffi_out_err: UniffiRustCallStatus, 
     ): RustBuffer.ByValue
@@ -916,6 +920,8 @@ internal interface UniffiLib : Library {
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_random_key(
     ): Short
+    fun uniffi_openpass_core_checksum_func_ffi_recovery_auth_proof(
+    ): Short
     fun uniffi_openpass_core_checksum_func_ffi_totp_at(
     ): Short
     fun uniffi_openpass_core_checksum_func_ffi_unwrap_key(
@@ -970,6 +976,9 @@ private fun uniffiCheckApiChecksums(lib: UniffiLib) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_random_key() != 51891.toShort()) {
+        throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
+    }
+    if (lib.uniffi_openpass_core_checksum_func_ffi_recovery_auth_proof() != 2736.toShort()) {
         throw RuntimeException("UniFFI API checksum mismatch: try cleaning and rebuilding your project")
     }
     if (lib.uniffi_openpass_core_checksum_func_ffi_totp_at() != 45755.toShort()) {
@@ -1488,6 +1497,16 @@ public object FfiConverterTypeTotpAlgorithm: FfiConverterRustBuffer<TotpAlgorith
     uniffiRustCall() { _status ->
     UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_random_key(
         _status)
+}
+    )
+    }
+    
+
+    @Throws(FfiException::class) fun `ffiRecoveryAuthProof`(`recoveryKey`: kotlin.ByteArray): kotlin.ByteArray {
+            return FfiConverterByteArray.lift(
+    uniffiRustCallWithError(FfiException) { _status ->
+    UniffiLib.INSTANCE.uniffi_openpass_core_fn_func_ffi_recovery_auth_proof(
+        FfiConverterByteArray.lower(`recoveryKey`),_status)
 }
     )
     }

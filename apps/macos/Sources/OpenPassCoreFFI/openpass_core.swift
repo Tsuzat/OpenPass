@@ -925,6 +925,13 @@ public func ffiRandomKey() -> Data {
     )
 })
 }
+public func ffiRecoveryAuthProof(recoveryKey: Data)throws  -> Data {
+    return try  FfiConverterData.lift(try rustCallWithError(FfiConverterTypeFfiError.lift) {
+    uniffi_openpass_core_fn_func_ffi_recovery_auth_proof(
+        FfiConverterData.lower(recoveryKey),$0
+    )
+})
+}
 public func ffiTotpAt(secret: Data, unixSeconds: UInt64, period: UInt64, digits: UInt32, algorithm: TotpAlgorithm) -> String {
     return try!  FfiConverterString.lift(try! rustCall() {
     uniffi_openpass_core_fn_func_ffi_totp_at(
@@ -999,6 +1006,9 @@ private var initializationResult: InitializationResult = {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_random_key() != 51891) {
+        return InitializationResult.apiChecksumMismatch
+    }
+    if (uniffi_openpass_core_checksum_func_ffi_recovery_auth_proof() != 2736) {
         return InitializationResult.apiChecksumMismatch
     }
     if (uniffi_openpass_core_checksum_func_ffi_totp_at() != 45755) {

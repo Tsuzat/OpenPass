@@ -9,6 +9,9 @@ struct LockView: View {
         VStack(spacing: 16) {
             Image(systemName: "lock.shield").font(.system(size: 48))
             Text("OpenPass").font(.title).bold()
+            TextField("Email", text: $vault.email)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 320)
             SecureField("Master password", text: $password)
                 .textFieldStyle(.roundedBorder)
                 .frame(maxWidth: 320)

@@ -37,6 +37,9 @@ export class MemoryStore implements Store {
   async revokeDeviceSessions(userId: string, deviceId: string) {
     for (const s of this.sessions.values()) if (s.userId === userId && s.deviceId === deviceId) s.revoked = 1;
   }
+  async revokeOtherSessions(userId: string, keepSessionId: string | null) {
+    for (const s of this.sessions.values()) if (s.userId === userId && s.id !== keepSessionId) s.revoked = 1;
+  }
   async getItem(vaultId: string, itemId: string) { return this.items.get(`${vaultId}:${itemId}`) ?? null; }
   async upsertItem(i: ItemRow) { this.items.set(`${i.vaultId}:${i.id}`, i); }
   async listItemsSince(vaultId: string, sinceIso: string | null) {

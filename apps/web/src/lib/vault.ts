@@ -49,6 +49,7 @@ export async function register(email: string, masterPassword: string): Promise<{
   const data = await api("/auth/register", "POST", {
     email, authVerifierB64: auth.authVerifierB64, kdfSaltB64: saltB64, kdfParams,
     wrappedVaultKeyB64, recoveryWrappedVaultKeyB64,
+    recoveryAuthProofB64: await crypto.recoveryProof(recovery.keyB64),
     identityPublicKeyB64: await crypto.randomKey(), // placeholder: X25519 identity keypair lands with sharing (post-v1)
     wrappedIdentityPrivateKeyB64: await crypto.wrapKey(vaultKey, await crypto.randomKey()),
     device: { id: deviceId(), name: "Web Vault", platform: "web" },
@@ -97,6 +98,44 @@ export async function login(email: string, masterPassword: string): Promise<{ of
   }
 }
 
+export async function changePassword(currentPassword: string, newPassword: string): Promise<void> {
+  if (!vaultKeyB64 || !accessToken) throw new Error("LOCKED");
+  const cached = await offlineStore.loadSession();
+  if (!cached) throw new Error("NO_CACHED_SESSION");
+  const oldParams = { ...(JSON.parse(cached.kdfParamsJson) as object), saltB64: cached.kdfSaltB64 } as crypto.KdfParams;
+  const current = await crypto.derive(currentPassword, oldParams);
+  // sanity: current KEK must unwrap the cached vault key (rejects wrong current password locally)
+  await crypto.unwrapKey(current.kekB64, cached.wrappedVaultKeyB64);
+
+  const newParams = await crypto.newKdfParams();
+  const next = await crypto.derive(newPassword, newParams);
+  const { saltB64, ...kdfParams } = newParams;
+  const wrappedVaultKeyB64 = await crypto.wrapKey(next.kekB64, vaultKeyB64);
+  await api("/auth/change-password", "POST", {
+    currentAuthVerifierB64: current.authVerifierB64, newAuthVerifierB64: next.authVerifierB64,
+    kdfSaltB64: saltB64, kdfParams, wrappedVaultKeyB64,
+  }, true);
+  await offlineStore.saveSession({ ...cached, wrappedVaultKeyB64, kdfSaltB64: saltB64, kdfParamsJson: JSON.stringify(kdfParams) });
+}
+
+/** Forgot-password recovery: recovery key -> proof -> unwrap vault -> set a new master password. */
+export async function recoverWithRecoveryKey(email: string, recoveryKeyText: string, newPassword: string): Promise<void> {
+  const recoveryKeyB64 = await crypto.parseRecovery(recoveryKeyText);
+  const proof = await crypto.recoveryProof(recoveryKeyB64);
+  const info = await api("/auth/recovery-info", "POST", { email, recoveryAuthProofB64: proof });
+  const vaultKey = await crypto.unwrapKey(recoveryKeyB64, info.recoveryWrappedVaultKeyB64);
+  const newParams = await crypto.newKdfParams();
+  const next = await crypto.derive(newPassword, newParams);
+  const { saltB64, ...kdfParams } = newParams;
+  await api("/auth/recover", "POST", {
+    email, recoveryAuthProofB64: proof, newAuthVerifierB64: next.authVerifierB64,
+    kdfSaltB64: saltB64, kdfParams,
+    wrappedVaultKeyB64: await crypto.wrapKey(next.kekB64, vaultKey),
+    recoveryWrappedVaultKeyB64: await crypto.wrapKey(recoveryKeyB64, vaultKey),
+  });
+  await login(email, newPassword);
+}
+
 export interface VaultItemSummary { id: string; type: string; revision: number; name: string; plaintext: Record<string, any> }
 
 async function pullMerge(): Promise<void> {
@@ -113,9 +152,13 @@ export async function syncPending(): Promise<void> {
   if (!accessToken) return;
   for (const item of await offlineStore.dirtyItems()) {
     try {
-      await api(`/items/${item.id}`, "PUT", {
-        type: item.type, ciphertextB64: item.ciphertextB64, wrappedItemKeyB64: item.wrappedItemKeyB64, revision: item.revision,
-      }, true);
+      if (item.deleted) {
+        await api(`/items/${item.id}`, "DELETE", undefined, true);
+      } else {
+        await api(`/items/${item.id}`, "PUT", {
+          type: item.type, ciphertextB64: item.ciphertextB64, wrappedItemKeyB64: item.wrappedItemKeyB64, revision: item.revision,
+        }, true);
+      }
       await offlineStore.putItem({ ...item, dirty: false });
     } catch (e) {
       if ((e as { code?: string }).code === "NETWORK") return; // still offline; retry next unlock/pull
@@ -149,6 +192,27 @@ export async function createItem(type: string, plaintextFields: Record<string, u
   await offlineStore.putItem({
     id, type, ...enc, revision: 1, deleted: false, updatedAt: new Date().toISOString(), dirty: true,
   });
+  if (!offline) await syncPending().catch(() => undefined);
+}
+
+export async function updateItem(item: VaultItemSummary, fields: Record<string, unknown>): Promise<void> {
+  if (!vaultKeyB64) throw new Error("LOCKED");
+  const cached = (await offlineStore.allItems()).find((i) => i.id === item.id);
+  if (!cached) throw new Error("NOT_FOUND");
+  const plaintext = { ...item.plaintext, ...fields, v: 1, type: item.type };
+  const enc = await crypto.encryptItemJson(vaultKeyB64, item.id, plaintext);
+  // Unsynced (dirty) items collapse edits into the pending revision; synced items bump it.
+  const revision = cached.dirty ? cached.revision : cached.revision + 1;
+  await offlineStore.putItem({ ...cached, ...enc, revision, updatedAt: new Date().toISOString(), dirty: true });
+  if (!offline) await syncPending().catch(() => undefined);
+}
+
+export async function deleteItem(id: string): Promise<void> {
+  const cached = (await offlineStore.allItems()).find((i) => i.id === id);
+  if (!cached) return;
+  // Never synced: dropping the local row is enough, no tombstone needed.
+  if (cached.dirty && cached.revision === 1) { await offlineStore.removeItem(id); return; }
+  await offlineStore.putItem({ ...cached, deleted: true, dirty: true, updatedAt: new Date().toISOString() });
   if (!offline) await syncPending().catch(() => undefined);
 }
 

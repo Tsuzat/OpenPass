@@ -57,6 +57,10 @@ export const offlineStore = {
     await tx("items", "readwrite", (st) => st.put(item));
   },
   async putItems(items: CachedItem[]): Promise<void> { for (const i of items) await offlineStore.putItem(i); },
+  async removeItem(id: string): Promise<void> {
+    if (!hasIdb) { mem.items.delete(id); return; }
+    await tx("items", "readwrite", (st) => st.delete(id));
+  },
   async allItems(): Promise<CachedItem[]> {
     if (!hasIdb) return [...mem.items.values()];
     return tx("items", "readonly", (st) => st.getAll());

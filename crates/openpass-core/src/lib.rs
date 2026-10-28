@@ -194,6 +194,17 @@ pub fn generate_recovery_key() -> (String, [u8; 32]) {
     (grouped, key)
 }
 
+/// Proof of recovery-key possession for the server-side recovery flow.
+/// The server stores PBKDF2(this value) at registration; presenting the proof
+/// authorizes key replacement without ever revealing the recovery key itself
+/// (which is also the vault-key wrapper, hence domain separation).
+pub fn recovery_auth_proof(recovery_key: &[u8; 32]) -> [u8; 32] {
+    let hk = Hkdf::<Sha256>::new(None, recovery_key);
+    let mut out = [0u8; 32];
+    hk.expand(b"openpass/recovery-auth/v1", &mut out).expect("32-byte HKDF output is valid");
+    out
+}
+
 pub fn parse_recovery_key(text: &str) -> Result<[u8; 32], Error> {
     let cleaned: String = text.chars().filter(|c| c.is_ascii_alphanumeric()).collect();
     let bytes = data_encoding::BASE32_NOPAD.decode(cleaned.to_uppercase().as_bytes()).map_err(|_| Error::Encoding)?;

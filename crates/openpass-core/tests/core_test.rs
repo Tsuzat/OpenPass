@@ -45,6 +45,14 @@ fn item_encryption_roundtrip_and_tamper() {
 }
 
 #[test]
+fn recovery_proof_is_domain_separated() {
+    let (_, key) = generate_recovery_key();
+    let proof = recovery_auth_proof(&key);
+    assert_ne!(proof, key, "proof must not reveal the recovery key/wrapper");
+    assert_eq!(proof, recovery_auth_proof(&key), "proof is deterministic");
+}
+
+#[test]
 fn recovery_key_roundtrip() {
     let (text, key) = generate_recovery_key();
     assert_eq!(parse_recovery_key(&text).unwrap(), key);
