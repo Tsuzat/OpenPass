@@ -12,6 +12,8 @@ final class VaultStore: ObservableObject {
     @Published var isUnlocked = false
     @Published var serverURL = "https://your-worker.example.com"
     @Published var email = ""
+    /// Set once after registration — the UI must show it to the user a single time.
+    @Published var recoveryKeyToShow: String?
     private var autoLockTask: Task<Void, Never>?
     private(set) var accessToken: String?
     private var vaultKey: Data?
@@ -40,6 +42,32 @@ final class VaultStore: ObservableObject {
         //   vaultKey = try OpenPassCrypto.unwrapKey(wrapper: deviceKey, blob: blob)
         _ = try KeychainBiometricKeyStore().loadWrappedVaultKey()
         #endif
+        isUnlocked = true
+        scheduleAutoLock(minutes: 5)
+    }
+
+    /// Create a new account + vault on this device (bootstrap device is auto-approved).
+    func register(email: String, password: String) async throws {
+        guard let base = URL(string: serverURL) else { throw APIClient.APIError.decoding }
+        let client = APIClient(baseURL: base)
+        let kdf = try OpenPassCrypto.newKdfParams()
+        let params = APIClient.Prelogin.Params(memoryKib: kdf.memoryKib, iterations: kdf.iterations, parallelism: kdf.parallelism)
+        let auth = try OpenPassCrypto.deriveAuthMaterial(password: password, params: kdf)
+        let newVaultKey = OpenPassCrypto.randomVaultKey()
+        let recovery = OpenPassCrypto.generateRecoveryKey()
+        let resp = try await client.register(
+            email: email, authVerifier: auth.authVerifier,
+            kdfSaltB64: kdf.saltB64, kdfParams: params,
+            wrappedVaultKey: try OpenPassCrypto.wrapKey(wrapper: auth.kek, key: newVaultKey),
+            recoveryWrappedVaultKey: try OpenPassCrypto.wrapKey(wrapper: recovery.key, key: newVaultKey),
+            recoveryAuthProof: try OpenPassCrypto.recoveryAuthProof(recoveryKey: recovery.key),
+            identityPublicKey: OpenPassCrypto.randomVaultKey(), // placeholder until sharing (post-v1)
+            wrappedIdentityPrivateKey: try OpenPassCrypto.wrapKey(wrapper: newVaultKey, key: OpenPassCrypto.randomVaultKey()),
+            deviceId: deviceId, deviceName: Host.current().localizedName ?? "Mac")
+        vaultKey = newVaultKey
+        accessToken = resp.accessToken
+        recoveryKeyToShow = recovery.text
+        self.email = email
         isUnlocked = true
         scheduleAutoLock(minutes: 5)
     }

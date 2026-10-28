@@ -32,8 +32,33 @@ struct APIClient {
         do { return try JSONDecoder().decode(T.self, from: data) } catch { throw APIError.decoding }
     }
 
+    struct RegisterResponse: Decodable {
+        let accessToken: String
+        let refreshToken: String
+        let vaultId: String
+        let userId: String
+    }
+
     func prelogin(email: String) async throws -> Prelogin {
         try await post("/auth/prelogin", ["email": email])
+    }
+
+    func register(email: String, authVerifier: Data, kdfSaltB64: String,
+                  kdfParams: Prelogin.Params, wrappedVaultKey: Data, recoveryWrappedVaultKey: Data,
+                  recoveryAuthProof: Data, identityPublicKey: Data, wrappedIdentityPrivateKey: Data,
+                  deviceId: String, deviceName: String) async throws -> RegisterResponse {
+        try await post("/auth/register", [
+            "email": email,
+            "authVerifierB64": authVerifier.base64EncodedString(),
+            "kdfSaltB64": kdfSaltB64,
+            "kdfParams": ["memoryKib": kdfParams.memoryKib, "iterations": kdfParams.iterations, "parallelism": kdfParams.parallelism],
+            "wrappedVaultKeyB64": wrappedVaultKey.base64EncodedString(),
+            "recoveryWrappedVaultKeyB64": recoveryWrappedVaultKey.base64EncodedString(),
+            "recoveryAuthProofB64": recoveryAuthProof.base64EncodedString(),
+            "identityPublicKeyB64": identityPublicKey.base64EncodedString(),
+            "wrappedIdentityPrivateKeyB64": wrappedIdentityPrivateKey.base64EncodedString(),
+            "device": ["id": deviceId, "name": deviceName, "platform": "macos"],
+        ])
     }
 
     struct CipherItemDTO: Decodable {

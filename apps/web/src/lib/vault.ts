@@ -311,6 +311,29 @@ export async function deleteItem(id: string): Promise<void> {
 export const createLoginItem = (name: string, username: string, password: string, uri: string) =>
   createItem("login", { name, username, password, uris: uri ? [{ uri, match: "domain" }] : [], notes: "", totpId: null, customFields: [] });
 
+// ---------- Devices ----------
+
+export interface DeviceInfoRow { deviceId: string; name: string; platform: string; status: string; createdAt: string; lastSeenAt: string; current?: boolean }
+
+export async function listDevices(): Promise<DeviceInfoRow[]> {
+  if (!accessToken) throw new Error("LOCKED");
+  const data = await api("/devices", "GET", undefined, true);
+  return data.devices as DeviceInfoRow[];
+}
+export async function listPendingDevices(): Promise<DeviceInfoRow[]> {
+  if (!accessToken) throw new Error("LOCKED");
+  const data = await api("/devices/pending", "GET", undefined, true);
+  return data.devices as DeviceInfoRow[];
+}
+export async function approveDevice(deviceId: string): Promise<void> {
+  if (!accessToken) throw new Error("LOCKED");
+  await api(`/devices/${deviceId}/approve`, "POST", {}, true);
+}
+export async function revokeDevice(deviceId: string): Promise<void> {
+  if (!accessToken) throw new Error("LOCKED");
+  await api(`/devices/${deviceId}`, "DELETE", undefined, true);
+}
+
 // ---------- Files (Phase 3: chunked-AEAD blobs in R2) ----------
 
 export async function uploadFile(fileName: string, mimeType: string, bytes: Uint8Array): Promise<void> {

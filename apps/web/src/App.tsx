@@ -19,6 +19,8 @@ export default function App() {
   const [newFolder, setNewFolder] = useState("");
   const [trash, setTrash] = useState<vault.VaultItemSummary[]>([]);
   const [history, setHistory] = useState<vault.HistoryEntry[]>([]);
+  const [devices, setDevices] = useState<vault.DeviceInfoRow[]>([]);
+  const [pendingDevices, setPendingDevices] = useState<vault.DeviceInfoRow[]>([]);
   const [selected, setSelected] = useState<vault.VaultItemSummary | null>(null);
   const [reveal, setReveal] = useState(false);
   const [pwChange, setPwChange] = useState({ current: "", next: "" });
@@ -74,6 +76,8 @@ export default function App() {
       setItems(await vault.listItems()); setOffline(vault.isOffline());
       setFolderList(await vault.getFolders());
       setTrash(await vault.listTrash().catch(() => []));
+      setDevices(await vault.listDevices().catch(() => []));
+      setPendingDevices(await vault.listPendingDevices().catch(() => []));
     }
     catch (e) { setError(String((e as Error).message)); }
   }, []);
@@ -292,6 +296,23 @@ export default function App() {
             </div>
           </div>
         )}
+
+        <details style={{ marginBottom: 16 }}>
+          <summary>Devices ({devices.length}){pendingDevices.length > 0 && <span style={{ color: "#c00" }}> — {pendingDevices.length} awaiting approval</span>}</summary>
+          {pendingDevices.map((d) => (
+            <div key={d.deviceId} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span>⏳ {d.name} ({d.platform}) — requested {d.createdAt}</span>
+              <button onClick={async () => { await vault.approveDevice(d.deviceId); await refreshItems(); }}>Approve</button>
+            </div>
+          ))}
+          {devices.filter((d) => d.status === "approved").map((d) => (
+            <div key={d.deviceId} style={{ display: "flex", gap: 8, alignItems: "center" }}>
+              <span>{d.current ? "🟢" : "•"} {d.name} ({d.platform}) — last seen {d.lastSeenAt}</span>
+              {!d.current && <button onClick={async () => { if (confirm(`Revoke "${d.name}"? Its sessions will be invalidated.`)) { await vault.revokeDevice(d.deviceId); await refreshItems(); } }}>Revoke</button>}
+            </div>
+          ))}
+          <p style={{ color: "#888", fontSize: 12 }}>New devices cannot sync until approved here. Approving the wrong device gives it your encrypted vault (still protected by your master password).</p>
+        </details>
 
         <details style={{ marginBottom: 16 }}>
           <summary>Change master password</summary>
