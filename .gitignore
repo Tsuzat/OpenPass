@@ -1,0 +1,15 @@
+node_modules/
+dist/
+target/
+.wrangler/
+.dev.vars*
+*.local
+.DS_Store
+build/
+.gradle/
+DerivedData/
+*.xcodeproj/xcuserdata/
+
+# Agent tooling (not part of the project)
+.agents/
+skills-lock.json

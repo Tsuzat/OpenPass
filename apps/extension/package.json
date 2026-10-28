@@ -1,0 +1,10 @@
+{
+  "name": "@openpass/extension",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "bun build src/background.ts src/popup.ts src/content.ts --outdir dist && cp manifest.json public/popup.html dist/",
+    "build:firefox": "bun build src/background.ts src/popup.ts src/content.ts --outdir dist-firefox && cp manifest.firefox.json dist-firefox/manifest.json && cp public/popup.html dist-firefox/"
+  }
+}

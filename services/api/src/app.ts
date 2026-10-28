@@ -1,0 +1,255 @@
+import { Hono } from "hono";
+import { cors } from "hono/cors";
+import { CipherItem, LoginRequest, PreloginRequest, RegisterRequest, SyncPushRequest } from "@openpass/shared";
+import type { Store } from "./store/types";
+import { fakeSaltB64, hashVerifier, randomTokenB64, sha256Hex, verifyVerifier } from "./crypto";
+
+export interface AppOptions {
+  allowRegistration?: boolean;
+  pbkdf2Iterations?: number;
+  now?: () => number;
+}
+
+const ACCESS_TTL = 15 * 60 * 1000;
+const REFRESH_TTL = 30 * 24 * 60 * 60 * 1000;
+const DEFAULT_KDF = { memoryKib: 65536, iterations: 3, parallelism: 4 };
+
+export function createApp(store: Store, opts: AppOptions = {}) {
+  const app = new Hono();
+  const now = opts.now ?? (() => Date.now());
+  const attempts = new Map<string, { count: number; resetAt: number }>();
+
+  app.use("*", cors({ origin: "*", allowHeaders: ["Authorization", "Content-Type"], allowMethods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"] }));
+  app.use("*", async (c, next) => {
+    await next();
+    c.header("X-Content-Type-Options", "nosniff");
+    c.header("X-Frame-Options", "DENY");
+    c.header("Referrer-Policy", "no-referrer");
+    c.header("Cache-Control", "no-store");
+  });
+
+  const rateLimited = (key: string, limit = 20, windowMs = 60_000) => {
+    const t = now();
+    const e = attempts.get(key);
+    if (!e || t > e.resetAt) { attempts.set(key, { count: 1, resetAt: t + windowMs }); return false; }
+    e.count += 1;
+    return e.count > limit;
+  };
+  const err = (c: any, status: number, code: string, extra: object = {}) =>
+    c.json({ error: { code, ...extra } }, status);
+
+  async function issueSession(userId: string, deviceId: string) {
+    const accessToken = randomTokenB64();
+    const refreshToken = randomTokenB64();
+    const session = {
+      id: crypto.randomUUID(), userId, deviceId,
+      accessHash: await sha256Hex(accessToken), refreshHash: await sha256Hex(refreshToken), prevRefreshHash: null,
+      accessExpiresAt: now() + ACCESS_TTL, refreshExpiresAt: now() + REFRESH_TTL, revoked: 0, createdAt: new Date(now()).toISOString(),
+    };
+    await store.createSession(session);
+    return { accessToken, refreshToken, sessionId: session.id };
+  }
+
+  async function authUser(c: any) {
+    const header = c.req.header("Authorization") ?? "";
+    if (!header.startsWith("Bearer ")) return null;
+    const session = await store.getSessionByAccessHash(await sha256Hex(header.slice(7)));
+    if (!session || session.revoked || session.accessExpiresAt < now()) return null;
+    const user = await store.getUserById(session.userId);
+    return user ? { user, session } : null;
+  }
+  const requireAuth = async (c: any, next: any) => {
+    const a = await authUser(c);
+    if (!a) return err(c, 401, "UNAUTHORIZED");
+    (c as any).set("auth", a);
+    await next();
+  };
+
+  app.get("/health", (c) => c.json({ ok: true, service: "openpass-api", version: 1 }));
+
+  app.post("/auth/prelogin", async (c) => {
+    const body = PreloginRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const email = body.data.email.toLowerCase();
+    const user = await store.getUserByEmail(email);
+    if (!user) return c.json({ kdfSaltB64: await fakeSaltB64(email), kdfParams: DEFAULT_KDF });
+    return c.json({ kdfSaltB64: user.kdfSaltB64, kdfParams: JSON.parse(user.kdfParamsJson) });
+  });
+
+  app.post("/auth/register", async (c) => {
+    if (opts.allowRegistration === false) return err(c, 403, "REGISTRATION_CLOSED");
+    if (rateLimited(`register:${c.req.header("CF-Connecting-IP") ?? "local"}`)) return err(c, 429, "RATE_LIMITED");
+    const body = RegisterRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION", { issues: body.error.issues });
+    const d = body.data;
+    const email = d.email.toLowerCase();
+    if (await store.getUserByEmail(email)) return err(c, 409, "EMAIL_TAKEN");
+    const userId = crypto.randomUUID();
+    const vaultId = crypto.randomUUID();
+    const ts = new Date(now()).toISOString();
+    await store.createUser({
+      id: userId, email, verifierHash: await hashVerifier(d.authVerifierB64, opts.pbkdf2Iterations),
+      kdfSaltB64: d.kdfSaltB64, kdfParamsJson: JSON.stringify(d.kdfParams),
+      wrappedVaultKeyB64: d.wrappedVaultKeyB64, recoveryWrappedVaultKeyB64: d.recoveryWrappedVaultKeyB64,
+      identityPublicKeyB64: d.identityPublicKeyB64, wrappedIdentityPrivateKeyB64: d.wrappedIdentityPrivateKeyB64,
+      vaultId, createdAt: ts,
+    });
+    // Bootstrap device is auto-approved.
+    await store.upsertDevice({ userId, deviceId: d.device.id, name: d.device.name, platform: d.device.platform, status: "approved", createdAt: ts, lastSeenAt: ts });
+    await store.audit(userId, "register", d.device.platform);
+    const tokens = await issueSession(userId, d.device.id);
+    return c.json({ userId, vaultId, ...tokens }, 201);
+  });
+
+  app.post("/auth/login", async (c) => {
+    const ip = c.req.header("CF-Connecting-IP") ?? "local";
+    if (rateLimited(`login:${ip}`) || rateLimited(`login-ip:${ip}`, 100)) return err(c, 429, "RATE_LIMITED");
+    const body = LoginRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const d = body.data;
+    const user = await store.getUserByEmail(d.email.toLowerCase());
+    // Always run a verification-shaped failure for unknown users.
+    if (!user || !(await verifyVerifier(d.authVerifierB64, user.verifierHash))) return err(c, 401, "INVALID_CREDENTIALS");
+    const ts = new Date(now()).toISOString();
+    const existing = await store.getDevice(user.id, d.device.id);
+    if (!existing || existing.status !== "approved") {
+      await store.upsertDevice({ userId: user.id, deviceId: d.device.id, name: d.device.name, platform: d.device.platform, status: "pending", createdAt: existing?.createdAt ?? ts, lastSeenAt: ts });
+      await store.audit(user.id, "device_pending", d.device.id);
+      return err(c, 403, "DEVICE_APPROVAL_REQUIRED", { deviceId: d.device.id });
+    }
+    await store.upsertDevice({ ...existing, name: d.device.name, lastSeenAt: ts });
+    await store.audit(user.id, "login", d.device.id);
+    const tokens = await issueSession(user.id, d.device.id);
+    return c.json({
+      userId: user.id, vaultId: user.vaultId,
+      wrappedVaultKeyB64: user.wrappedVaultKeyB64, recoveryWrappedVaultKeyB64: user.recoveryWrappedVaultKeyB64,
+      identityPublicKeyB64: user.identityPublicKeyB64, wrappedIdentityPrivateKeyB64: user.wrappedIdentityPrivateKeyB64,
+      ...tokens,
+    });
+  });
+
+  app.get("/auth/device-status", async (c) => {
+    const deviceId = c.req.query("deviceId");
+    if (!deviceId) return err(c, 400, "VALIDATION");
+    return c.json({ status: await store.getDeviceStatus(deviceId) });
+  });
+
+  app.post("/auth/refresh", async (c) => {
+    const body = (await c.req.json().catch(() => null)) as { refreshToken?: string } | null;
+    if (!body?.refreshToken) return err(c, 400, "VALIDATION");
+    const hash = await sha256Hex(body.refreshToken);
+    const session = await store.getSessionByRefreshHash(hash);
+    if (!session) {
+      // Reuse of a rotated token = possible theft: revoke that device entirely.
+      const prev = await store.getSessionByPrevRefreshHash(hash);
+      if (prev) { await store.revokeDeviceSessions(prev.userId, prev.deviceId); await store.audit(prev.userId, "refresh_reuse_detected", prev.deviceId); }
+      return err(c, 401, "UNAUTHORIZED");
+    }
+    if (session.revoked || session.refreshExpiresAt < now()) return err(c, 401, "UNAUTHORIZED");
+    const accessToken = randomTokenB64();
+    const refreshToken = randomTokenB64();
+    await store.updateSessionTokens(session.id, await sha256Hex(accessToken), await sha256Hex(refreshToken), session.refreshHash, now() + ACCESS_TTL, now() + REFRESH_TTL);
+    return c.json({ accessToken, refreshToken, sessionId: session.id });
+  });
+
+  app.post("/auth/logout", requireAuth, async (c) => {
+    const { session } = (c as any).get("auth");
+    await store.revokeSession(session.id);
+    return c.json({ ok: true });
+  });
+
+  app.get("/vault", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    return c.json({
+      vaultId: user.vaultId, wrappedVaultKeyB64: user.wrappedVaultKeyB64,
+      recoveryWrappedVaultKeyB64: user.recoveryWrappedVaultKeyB64,
+      kdfSaltB64: user.kdfSaltB64, kdfParams: JSON.parse(user.kdfParamsJson),
+    });
+  });
+
+  app.get("/devices", requireAuth, async (c) => {
+    const { user, session } = (c as any).get("auth");
+    const devices = await store.listDevices(user.id);
+    return c.json({ devices: devices.map((d) => ({ ...d, current: d.deviceId === session.deviceId })) });
+  });
+
+  app.get("/devices/pending", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    return c.json({ devices: await store.listPendingDevices(user.id) });
+  });
+
+  app.post("/devices/:deviceId/approve", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const deviceId = c.req.param("deviceId");
+    if (!(await store.getDevice(user.id, deviceId))) return err(c, 404, "NOT_FOUND");
+    await store.setDeviceStatus(user.id, deviceId, "approved");
+    await store.audit(user.id, "device_approved", deviceId);
+    return c.json({ ok: true });
+  });
+
+  app.delete("/devices/:deviceId", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const deviceId = c.req.param("deviceId");
+    await store.revokeDeviceSessions(user.id, deviceId);
+    await store.deleteDevice(user.id, deviceId);
+    await store.audit(user.id, "device_revoked", deviceId);
+    return c.json({ ok: true });
+  });
+
+  const publicItem = (i: Awaited<ReturnType<Store["listItemsSince"]>>[number]) => ({
+    id: i.id, type: i.type, ciphertextB64: i.ciphertextB64, wrappedItemKeyB64: i.wrappedItemKeyB64,
+    revision: i.revision, deleted: i.deleted === 1, updatedAt: i.updatedAt,
+  });
+
+  async function upsertChecked(user: { id: string; vaultId: string }, item: CipherItem & { deleted?: boolean }) {
+    const existing = await store.getItem(user.vaultId, item.id);
+    const expected = existing ? existing.revision + 1 : 1;
+    if (item.revision !== expected) return { conflict: existing };
+    const row = {
+      id: item.id, vaultId: user.vaultId, userId: user.id, type: item.type,
+      ciphertextB64: item.ciphertextB64, wrappedItemKeyB64: item.wrappedItemKeyB64,
+      revision: item.revision, deleted: item.deleted ? 1 : 0, updatedAt: new Date(now()).toISOString(),
+    };
+    await store.upsertItem(row);
+    return { item: row };
+  }
+
+  app.get("/items", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const items = await store.listItemsSince(user.vaultId, c.req.query("since") ?? null);
+    return c.json({ items: items.map(publicItem), cursor: items.length ? items[items.length - 1].updatedAt : (c.req.query("since") ?? null) });
+  });
+
+  app.put("/items/:id", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const body = CipherItem.safeParse({ ...((await c.req.json().catch(() => null)) ?? {}), id: c.req.param("id") });
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const r = await upsertChecked(user, body.data);
+    if (r.conflict) return err(c, 409, "REVISION_CONFLICT", { serverItem: r.conflict ? publicItem(r.conflict) : null });
+    return c.json({ item: publicItem(r.item!) });
+  });
+
+  app.post("/sync/push", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const body = SyncPushRequest.safeParse(await c.req.json().catch(() => null));
+    if (!body.success) return err(c, 400, "VALIDATION");
+    const results = [];
+    for (const item of body.data.items) {
+      const r = await upsertChecked(user, item);
+      results.push(r.conflict ? { id: item.id, status: "conflict", serverItem: publicItem(r.conflict) } : { id: item.id, status: "ok", revision: item.revision });
+    }
+    return c.json({ results });
+  });
+
+  app.delete("/items/:id", requireAuth, async (c) => {
+    const { user } = (c as any).get("auth");
+    const existing = await store.getItem(user.vaultId, c.req.param("id"));
+    if (!existing) return err(c, 404, "NOT_FOUND");
+    await store.upsertItem({ ...existing, deleted: 1, revision: existing.revision + 1, updatedAt: new Date(now()).toISOString() });
+    return c.json({ ok: true, revision: existing.revision + 1 });
+  });
+
+  app.post("/attachments/presign", requireAuth, (c) => err(c, 501, "NOT_FOUND", { message: "File attachments land in Phase 3 (R2 chunked AEAD)" }));
+
+  return app;
+}

@@ -1,0 +1,13 @@
+{
+  "name": "openpass",
+  "version": "0.1.0",
+  "private": true,
+  "license": "AGPL-3.0-or-later",
+  "workspaces": ["services/*", "packages/*", "apps/*"],
+  "scripts": {
+    "test": "bun run --filter @openpass/api test && cargo test --manifest-path crates/openpass-core/Cargo.toml",
+    "typecheck": "bunx tsc --noEmit -p services/api && bunx tsc --noEmit -p packages/shared",
+    "dev:api": "bun run --filter @openpass/api dev",
+    "setup": "bun run --filter @openpass/api setup"
+  }
+}

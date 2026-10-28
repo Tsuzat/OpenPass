@@ -1,0 +1,23 @@
+[package]
+name = "openpass-core"
+version = "0.1.0"
+edition = "2021"
+license = "AGPL-3.0-or-later"
+description = "OpenPass shared cryptography core: KDF, key wrapping, item encryption, TOTP"
+
+[dependencies]
+argon2 = "0.5"
+hkdf = "0.12"
+sha2 = "0.10"
+sha1 = "0.10"
+hmac = "0.12"
+chacha20poly1305 = "0.10"
+rand_core = { version = "0.6", features = ["getrandom"] }
+zeroize = { version = "1", features = ["derive"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+base64ct = { version = "1", features = ["alloc"] }
+data-encoding = "2"
+
+[dev-dependencies]
+hex = "0.4"
