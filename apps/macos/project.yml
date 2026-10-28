@@ -1,0 +1,73 @@
+name: OpenPass
+options:
+  bundleIdPrefix: app.openpass
+  deploymentTarget:
+    macOS: "14.0"
+packages:
+  VaultKit:
+    path: VaultKit
+settings:
+  base:
+    SWIFT_VERSION: "5.9"
+    MACOSX_DEPLOYMENT_TARGET: "14.0"
+    CODE_SIGN_STYLE: Manual
+targets:
+  OpenPassMac:
+    type: application
+    platform: macOS
+    sources:
+      - Sources/OpenPassMac
+      - Sources/OpenPassCoreFFI/openpass_core.swift
+    info:
+      path: Info.plist
+      properties:
+        CFBundleDisplayName: OpenPass
+        NSHighResolutionCapable: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openpass.mac
+        PRODUCT_NAME: OpenPass
+        ENABLE_PREVIEWS: "YES"
+    entitlements:
+      path: OpenPassMac.entitlements
+      properties:
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups:
+          - group.app.openpass
+    dependencies:
+      - package: VaultKit
+        product: VaultKit
+      - framework: Frameworks/OpenPassCoreFFI.xcframework
+        embed: false
+      - target: CredentialProvider
+        embed: true
+  CredentialProvider:
+    type: app-extension
+    platform: macOS
+    sources:
+      - CredentialProvider/CredentialProviderViewController.swift
+      - Sources/OpenPassCoreFFI/openpass_core.swift
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: app.openpass.mac.credential-provider
+        PRODUCT_NAME: CredentialProvider
+    info:
+      path: CredentialProvider/Info.plist
+      properties:
+        NSExtension:
+          NSExtensionPointIdentifier: com.apple.authentication-services.credential-provider-ui
+          NSExtensionPrincipalClass: $(PRODUCT_MODULE_NAME).CredentialProviderViewController
+    entitlements:
+      path: CredentialProvider/CredentialProvider.entitlements
+      properties:
+        com.apple.developer.authentication-services.autofill-credential-provider: true
+        com.apple.security.app-sandbox: true
+        com.apple.security.network.client: true
+        com.apple.security.application-groups:
+          - group.app.openpass
+    dependencies:
+      - package: VaultKit
+        product: VaultKit
+      - framework: Frameworks/OpenPassCoreFFI.xcframework
+        embed: false

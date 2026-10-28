@@ -18,3 +18,6 @@ skills-lock.json
 # Generated Android native libs (scripts/build-android-core.sh)
 apps/android/app/src/main/jniLibs/
 apps/android/local.properties
+
+# Generated macOS frameworks (scripts/build-macos-core.sh)
+apps/macos/Frameworks/

@@ -30,7 +30,10 @@ struct LockView: View {
                 }
             }
             if let error { Text(error).foregroundStyle(.red).font(.caption) }
-            Text("Server: \(vault.serverURL)").font(.caption).foregroundStyle(.secondary)
+            TextField("Server URL", text: $vault.serverURL)
+                .textFieldStyle(.roundedBorder)
+                .frame(maxWidth: 320)
+                .font(.caption)
         }
         .padding(40)
         .frame(minWidth: 420, minHeight: 320)
